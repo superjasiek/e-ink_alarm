@@ -239,7 +239,7 @@ void handleSave() {
 #define NOTE_B3  247
 #define NOTE_C4  262
 
-void playRingtone(int ringtone, bool reset = false) {
+void playRingtone(int ringtone, bool reset) {
   static int melody_pos = 0;
   static unsigned long last_note_time = 0;
 
