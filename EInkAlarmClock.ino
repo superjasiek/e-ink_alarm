@@ -4,8 +4,10 @@
 #include <Preferences.h>
 #include <time.h>
 #include <GxEPD2_BW.h>
-#include <GxEPD2_290_T94_V2.h>
 #include <U8g2_for_Adafruit_GFX.h>
+#include <Fonts/FreeMonoBold12pt7b.h>
+#include <Fonts/FreeMonoBold9pt7b.h>
+#include <Fonts/FreeMono9pt7b.h>
 
 // --- USTAWIENIA CZASU (NTP) ---
 const char* NTP_SERVER = "pool.ntp.org";
@@ -14,16 +16,16 @@ const int   DAYLIGHT_OFFSET_SEC = 3600; // Przesunięcie dla czasu letniego
 
 // --- DEFINICJE PINÓW ---
 // Przyciski
-const int BUTTON_UP_PIN = 32;
-const int BUTTON_DOWN_PIN = 33;
+const int BUTTON_UP_PIN = 4;
+const int BUTTON_DOWN_PIN = 17;
 const int BUTTON_OK_PIN = 25;
 // Głośnik
 const int SPEAKER_PIN = 26;
 // Wyświetlacz e-ink (SPI) - dostosuj do swojego podłączenia!
-const int EPD_CS_PIN = 5;
-const int EPD_DC_PIN = 17;
-const int EPD_RST_PIN = 16;
-const int EPD_BUSY_PIN = 4;
+const int EPD_CS_PIN = 22;
+const int EPD_DC_PIN = 27;
+const int EPD_RST_PIN = 33;
+const int EPD_BUSY_PIN = 32;
 
 // --- OBIEKTY I ZMIENNE GLOBALNE ---
 WebServer server(80);
@@ -92,7 +94,7 @@ void setup() {
 
   // --- INICJALIZACJA SPRZĘTU ---
   // Wyświetlacz
-  display.init(115200);
+  display.init(115200, true, 2, false);
   display.setRotation(1);
   u8g2Fonts.begin(display);
 
@@ -294,36 +296,44 @@ void playRingtone(int ringtone, bool reset) {
 void drawTimeScreen(struct tm &timeinfo) {
   char timeHourMin[6];
   char dateStr[16];
+  const char* dayNames[] = {"Niedziela", "Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota"};
 
   strftime(timeHourMin, sizeof(timeHourMin), "%H:%M", &timeinfo);
   strftime(dateStr, sizeof(dateStr), "%d.%m.%Y", &timeinfo);
 
-  display.setPartialWindow(0, 0, display.width(), display.height());
+  display.setFullWindow();
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
     u8g2Fonts.setFontMode(1);
     u8g2Fonts.setFontDirection(0);
     u8g2Fonts.setForegroundColor(GxEPD_BLACK);
+    u8g2Fonts.setBackgroundColor(GxEPD_WHITE);
 
-    // Rysuj godzinę i minuty
+    // 1. Duża godzina na środku
     u8g2Fonts.setFont(u8g2_font_logisoso78_tn);
-    u8g2Fonts.setCursor(5, 85);
+    int16_t tw = u8g2Fonts.getUTF8Width(timeHourMin);
+    u8g2Fonts.setCursor((display.width() - tw) / 2, 85);
     u8g2Fonts.print(timeHourMin);
 
-    // Rysuj datę
+    // 2. Lewy dolny róg - informacja o alarmie
     u8g2Fonts.setFont(u8g2_font_helvR14_tf);
-    u8g2Fonts.setCursor(170, 30);
-    u8g2Fonts.print(dateStr);
+    u8g2Fonts.setCursor(10, 120);
+    if (isAlarmEnabled) {
+      u8g2Fonts.print("ALARM: ");
+      char alarmTime[10];
+      sprintf(alarmTime, "%02d:%02d", alarmHour, alarmMinute);
+      u8g2Fonts.print(alarmTime);
+    } else {
+      u8g2Fonts.print("ALARM OFF");
+    }
 
-    // Rysuj status alarmu
-    u8g2Fonts.setFont(u8g2_font_helvR14_tf);
-    u8g2Fonts.setCursor(170, 60);
-    char alarmStatus[15];
-    sprintf(alarmStatus, "Alarm %02d:%02d", alarmHour, alarmMinute);
-    u8g2Fonts.print(alarmStatus);
-    u8g2Fonts.setCursor(170, 80);
-    u8g2Fonts.print(isAlarmEnabled ? "(Wlaczony)" : "(Wylaczony)");
+    // 3. Prawy dolny róg - data i słownie dzień tygodnia
+    u8g2Fonts.setFont(u8g2_font_helvR12_tf);
+    String footerRight = String(dateStr) + " " + dayNames[timeinfo.tm_wday];
+    int16_t trw = u8g2Fonts.getUTF8Width(footerRight.c_str());
+    u8g2Fonts.setCursor(display.width() - trw - 10, 120);
+    u8g2Fonts.print(footerRight);
 
   } while (display.nextPage());
 }
@@ -389,6 +399,7 @@ void drawSetAlarmScreen(bool isSettingHour) {
     u8g2Fonts.setFontMode(1);
     u8g2Fonts.setFontDirection(0);
     u8g2Fonts.setForegroundColor(GxEPD_BLACK);
+    u8g2Fonts.setBackgroundColor(GxEPD_WHITE);
 
     u8g2Fonts.setFont(u8g2_font_helvR14_tf);
     u8g2Fonts.setCursor(10, 30);
