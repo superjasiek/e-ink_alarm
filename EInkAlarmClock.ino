@@ -4,6 +4,7 @@
 #include <Preferences.h>
 #include <time.h>
 #include <GxEPD2_BW.h>
+#include <GxEPD2_290_T94_V2.h>
 #include <U8g2_for_Adafruit_GFX.h>
 
 // --- USTAWIENIA CZASU (NTP) ---
@@ -27,7 +28,8 @@ const int EPD_BUSY_PIN = 4;
 // --- OBIEKTY I ZMIENNE GLOBALNE ---
 WebServer server(80);
 Preferences preferences;
-GxEPD2_BW<GxEPD2_290, GxEPD2_290::HEIGHT> display(GxEPD2_290(EPD_CS_PIN, EPD_DC_PIN, EPD_RST_PIN, EPD_BUSY_PIN));
+GxEPD2_BW<GxEPD2_290_T94_V2, GxEPD2_290_T94_V2::HEIGHT> display(GxEPD2_290_T94_V2(EPD_CS_PIN, EPD_DC_PIN, EPD_RST_PIN, EPD_BUSY_PIN)
+);
 U8G2_FOR_ADAFRUIT_GFX u8g2Fonts;
 
 // Konfiguracja (ładowana z pamięci NVS)
@@ -91,6 +93,7 @@ void setup() {
   // --- INICJALIZACJA SPRZĘTU ---
   // Wyświetlacz
   display.init(115200);
+  display.setRotation(1);
   u8g2Fonts.begin(display);
 
   // Przyciski
