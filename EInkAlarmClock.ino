@@ -1,4 +1,6 @@
 #include <WiFi.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
 #include <WebServer.h>
 #include <WiFiManager.h>
 #include <Preferences.h>
@@ -50,9 +52,15 @@ AppState currentState = STATE_DISPLAY_TIME;
 // Zmienne alarmu
 int alarmHour = 6;
 int alarmMinute = 30;
+bool alarmDays[7] = {true, true, true, true, true, true, true};
 bool isAlarmEnabled = true;
 bool isAlarmRinging = false;
 bool forceScreenUpdate = false;
+
+// Zmienne pogody
+float currentTemp = 0.0;
+int weatherCode = 0;
+unsigned long lastWeatherFetch = 0;
 
 // Prototypy funkcji
 void saveConfiguration();
@@ -63,6 +71,9 @@ void playRingtone(int ringtone, bool reset = false);
 void drawTimeScreen(struct tm &timeinfo);
 void handleButtons();
 void drawSetAlarmScreen(bool isSettingHour);
+void fetchWeather();
+String getWeatherDesc(int code);
+long getMinutesToNextAlarm(struct tm &now);
 
 
 void setup() {
@@ -131,13 +142,19 @@ void loop() {
     return;
   }
 
+  // Pobieranie pogody co 30 minut
+  if (millis() - lastWeatherFetch > 1800000 || lastWeatherFetch == 0) {
+    fetchWeather();
+  }
+
   // Zresetuj flagę sprawdzania alarmu, gdy minuta się zmieni
   if (timeinfo.tm_min != lastMinute) {
     alarmCheckedForThisMinute = false;
   }
 
-  // Logika alarmu - sprawdzana raz na minutę
-  if (isAlarmEnabled && !isAlarmRinging && !alarmCheckedForThisMinute && timeinfo.tm_hour == alarmHour && timeinfo.tm_min == alarmMinute) {
+  // Logika alarmu - sprawdzana raz na minutę, uwzględniając wybrane dni
+  if (isAlarmEnabled && alarmDays[timeinfo.tm_wday] && !isAlarmRinging && !alarmCheckedForThisMinute &&
+      timeinfo.tm_hour == alarmHour && timeinfo.tm_min == alarmMinute) {
     isAlarmRinging = true;
     currentState = STATE_ALARM_RINGING;
     alarmCheckedForThisMinute = true;
@@ -151,6 +168,13 @@ void loop() {
   // Odświeżanie wyświetlacza
   if ((timeinfo.tm_min != lastMinute && currentState == STATE_DISPLAY_TIME) || forceScreenUpdate) {
     lastMinute = timeinfo.tm_min;
+
+    // Pełne odświeżanie co godzinę, inaczej częściowe
+    if (timeinfo.tm_min == 0 || forceScreenUpdate) {
+      display.setFullWindow();
+    } else {
+      display.setPartialWindow(0, 0, display.width(), display.height());
+    }
 
     // Wybierz odpowiedni ekran do narysowania
     if (currentState == STATE_SET_ALARM_HOUR) {
@@ -176,6 +200,13 @@ void saveConfiguration() {
   preferences.putBool("isAlarmEnabled", isAlarmEnabled);
   preferences.putLong("gmtOffset", gmtOffsetSeconds);
   preferences.putInt("ringtone", selectedRingtone);
+
+  uint8_t dayMask = 0;
+  for (int i = 0; i < 7; i++) {
+    if (alarmDays[i]) dayMask |= (1 << i);
+  }
+  preferences.putUChar("alarmDays", dayMask);
+
   preferences.end();
   Serial.println("Konfiguracja zapisana.");
 }
@@ -187,6 +218,12 @@ void loadConfiguration() {
   isAlarmEnabled = preferences.getBool("isAlarmEnabled", true);
   gmtOffsetSeconds = preferences.getLong("gmtOffset", 3600);
   selectedRingtone = preferences.getInt("ringtone", 1);
+
+  uint8_t dayMask = preferences.getUChar("alarmDays", 0x7F); // Domyślnie wszystkie dni
+  for (int i = 0; i < 7; i++) {
+    alarmDays[i] = (dayMask & (1 << i));
+  }
+
   preferences.end();
   Serial.println("Konfiguracja wczytana.");
 }
@@ -200,6 +237,14 @@ String buildRootPage() {
 
   page += "<div class='form-group'><label for='alarm_hour'>Godzina alarmu:</label><input type='number' id='alarm_hour' name='alarm_hour' min='0' max='23' value='" + String(alarmHour) + "' required></div>";
   page += "<div class='form-group'><label for='alarm_minute'>Minuta alarmu:</label><input type='number' id='alarm_minute' name='alarm_minute' min='0' max='59' value='" + String(alarmMinute) + "' required></div>";
+
+  page += "<div class='form-group'><label>Dni alarmu:</label><br>";
+  const char* dayLabels[] = {"Nie", "Pon", "Wt", "Sr", "Czw", "Pt", "Sob"};
+  for (int i = 0; i < 7; i++) {
+    page += "<input type='checkbox' name='day" + String(i) + "' value='1'" + (alarmDays[i] ? " checked" : "") + "> " + dayLabels[i] + " ";
+    if (i == 3) page += "<br>";
+  }
+  page += "</div>";
 
   page += "<div class='form-group'><label for='timezone'>Strefa czasowa:</label><select id='timezone' name='timezone'>";
   for (int i = -12; i <= 12; i++) {
@@ -228,6 +273,10 @@ void handleSave() {
   alarmMinute = server.arg("alarm_minute").toInt();
   gmtOffsetSeconds = server.arg("timezone").toInt();
   selectedRingtone = server.arg("ringtone").toInt();
+
+  for (int i = 0; i < 7; i++) {
+    alarmDays[i] = server.hasArg("day" + String(i));
+  }
 
   saveConfiguration();
 
@@ -295,13 +344,17 @@ void playRingtone(int ringtone, bool reset) {
 
 void drawTimeScreen(struct tm &timeinfo) {
   char timeHourMin[6];
-  char dateStr[16];
-  const char* dayNames[] = {"Niedziela", "Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota"};
-
   strftime(timeHourMin, sizeof(timeHourMin), "%H:%M", &timeinfo);
-  strftime(dateStr, sizeof(dateStr), "%d.%m.%Y", &timeinfo);
 
-  display.setFullWindow();
+  // Oblicz czas do alarmu
+  long minsToAlarm = getMinutesToNextAlarm(timeinfo);
+  String alarmRemaining = "";
+  if (minsToAlarm >= 0) {
+    alarmRemaining = "Alarm za: " + String(minsToAlarm / 60) + "h " + String(minsToAlarm % 60) + "m";
+  } else {
+    alarmRemaining = "Brak alarmu";
+  }
+
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
@@ -310,15 +363,21 @@ void drawTimeScreen(struct tm &timeinfo) {
     u8g2Fonts.setForegroundColor(GxEPD_BLACK);
     u8g2Fonts.setBackgroundColor(GxEPD_WHITE);
 
-    // 1. Duża godzina na środku
-    u8g2Fonts.setFont(u8g2_font_logisoso78_tn);
+    // 1. Pogoda u góry
+    u8g2Fonts.setFont(u8g2_font_helvR12_tf);
+    String weatherStr = "Cieszyn: " + String(currentTemp, 1) + "C, " + getWeatherDesc(weatherCode);
+    u8g2Fonts.setCursor(10, 20);
+    u8g2Fonts.print(weatherStr);
+
+    // 2. Główna godzina (pomniejszona i wyśrodkowana)
+    u8g2Fonts.setFont(u8g2_font_logisoso58_tn);
     int16_t tw = u8g2Fonts.getUTF8Width(timeHourMin);
-    u8g2Fonts.setCursor((display.width() - tw) / 2, 85);
+    u8g2Fonts.setCursor((display.width() - tw) / 2, 90);
     u8g2Fonts.print(timeHourMin);
 
-    // 2. Lewy dolny róg - informacja o alarmie
-    u8g2Fonts.setFont(u8g2_font_helvR14_tf);
-    u8g2Fonts.setCursor(10, 120);
+    // 3. Lewy dolny róg - status alarmu
+    u8g2Fonts.setFont(u8g2_font_helvR12_tf);
+    u8g2Fonts.setCursor(10, 122);
     if (isAlarmEnabled) {
       u8g2Fonts.print("ALARM: ");
       char alarmTime[10];
@@ -328,12 +387,10 @@ void drawTimeScreen(struct tm &timeinfo) {
       u8g2Fonts.print("ALARM OFF");
     }
 
-    // 3. Prawy dolny róg - data i słownie dzień tygodnia
-    u8g2Fonts.setFont(u8g2_font_helvR12_tf);
-    String footerRight = String(dateStr) + " " + dayNames[timeinfo.tm_wday];
-    int16_t trw = u8g2Fonts.getUTF8Width(footerRight.c_str());
-    u8g2Fonts.setCursor(display.width() - trw - 10, 120);
-    u8g2Fonts.print(footerRight);
+    // 4. Prawy dolny róg - czas do alarmu
+    int16_t trw = u8g2Fonts.getUTF8Width(alarmRemaining.c_str());
+    u8g2Fonts.setCursor(display.width() - trw - 10, 122);
+    u8g2Fonts.print(alarmRemaining);
 
   } while (display.nextPage());
 }
@@ -419,4 +476,57 @@ void drawSetAlarmScreen(bool isSettingHour) {
     }
 
   } while (display.nextPage());
+}
+// --- FUNKCJE POGODY I LOGIKI ---
+
+void fetchWeather() {
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    http.begin("https://api.open-meteo.com/v1/forecast?latitude=49.75&longitude=18.63&current_weather=true");
+    int httpCode = http.GET();
+    if (httpCode == HTTP_CODE_OK) {
+      String payload = http.getString();
+      StaticJsonDocument<512> doc;
+      DeserializationError error = deserializeJson(doc, payload);
+      if (!error) {
+        currentTemp = doc["current_weather"]["temperature"];
+        weatherCode = doc["current_weather"]["weathercode"];
+        lastWeatherFetch = millis();
+        Serial.println("Pogoda zaktualizowana.");
+      }
+    }
+    http.end();
+  }
+}
+
+String getWeatherDesc(int code) {
+  switch (code) {
+    case 0: return "Bezchmurnie";
+    case 1: case 2: case 3: return "Zachmurzenie";
+    case 45: case 48: return "Mgla";
+    case 51: case 53: case 55: return "Mzywka";
+    case 61: case 63: case 65: return "Deszcz";
+    case 71: case 73: case 75: return "Snieg";
+    case 95: return "Burza";
+    default: return "Inna";
+  }
+}
+
+long getMinutesToNextAlarm(struct tm &now) {
+  if (!isAlarmEnabled) return -1;
+  int currentDay = now.tm_wday;
+  int currentMin = now.tm_hour * 60 + now.tm_min;
+  int alarmMin = alarmHour * 60 + alarmMinute;
+
+  for (int i = 0; i < 8; i++) {
+    int dayToCheck = (currentDay + i) % 7;
+    if (alarmDays[dayToCheck]) {
+      if (i == 0 && alarmMin > currentMin) {
+        return alarmMin - currentMin;
+      } else if (i > 0) {
+        return i * 1440 + alarmMin - currentMin;
+      }
+    }
+  }
+  return -1;
 }
