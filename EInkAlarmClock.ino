@@ -14,16 +14,16 @@ const int   DAYLIGHT_OFFSET_SEC = 3600; // Przesunięcie dla czasu letniego
 
 // --- DEFINICJE PINÓW ---
 // Przyciski
-const int BUTTON_UP_PIN = 32;
-const int BUTTON_DOWN_PIN = 33;
+const int BUTTON_UP_PIN = 4;
+const int BUTTON_DOWN_PIN = 17;
 const int BUTTON_OK_PIN = 25;
 // Głośnik
 const int SPEAKER_PIN = 26;
 // Wyświetlacz e-ink (SPI) - dostosuj do swojego podłączenia!
-const int EPD_CS_PIN = 5;
-const int EPD_DC_PIN = 17;
-const int EPD_RST_PIN = 16;
-const int EPD_BUSY_PIN = 4;
+const int EPD_CS_PIN = 22;
+const int EPD_DC_PIN = 27;
+const int EPD_RST_PIN = 33;
+const int EPD_BUSY_PIN = 32;
 
 // --- OBIEKTY I ZMIENNE GLOBALNE ---
 WebServer server(80);
