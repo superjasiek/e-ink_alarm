@@ -50,8 +50,8 @@ enum AppState {
 AppState currentState = STATE_DISPLAY_TIME;
 
 // Zmienne alarmu
-int alarmHour = 6;
-int alarmMinute = 30;
+int alarmHours[7] = {6, 6, 6, 6, 6, 6, 6};
+int alarmMinutes[7] = {30, 30, 30, 30, 30, 30, 30};
 bool alarmDays[7] = {true, true, true, true, true, true, true};
 bool isAlarmEnabled = true;
 bool isAlarmRinging = false;
@@ -61,6 +61,8 @@ bool forceScreenUpdate = false;
 float currentTemp = 0.0;
 int weatherCode = 0;
 unsigned long lastWeatherFetch = 0;
+float cityLat = 49.75;
+float cityLon = 18.63;
 
 // Prototypy funkcji
 void saveConfiguration();
@@ -154,7 +156,7 @@ void loop() {
 
   // Logika alarmu - sprawdzana raz na minutę, uwzględniając wybrane dni
   if (isAlarmEnabled && alarmDays[timeinfo.tm_wday] && !isAlarmRinging && !alarmCheckedForThisMinute &&
-      timeinfo.tm_hour == alarmHour && timeinfo.tm_min == alarmMinute) {
+      timeinfo.tm_hour == alarmHours[timeinfo.tm_wday] && timeinfo.tm_min == alarmMinutes[timeinfo.tm_wday]) {
     isAlarmRinging = true;
     currentState = STATE_ALARM_RINGING;
     alarmCheckedForThisMinute = true;
@@ -195,11 +197,13 @@ void loop() {
 
 void saveConfiguration() {
   preferences.begin("alarm-clock", false);
-  preferences.putInt("alarmHour", alarmHour);
-  preferences.putInt("alarmMinute", alarmMinute);
+  preferences.putBytes("alarmHours", alarmHours, 7 * sizeof(int));
+  preferences.putBytes("alarmMins", alarmMinutes, 7 * sizeof(int));
   preferences.putBool("isAlarmEnabled", isAlarmEnabled);
   preferences.putLong("gmtOffset", gmtOffsetSeconds);
   preferences.putInt("ringtone", selectedRingtone);
+  preferences.putFloat("lat", cityLat);
+  preferences.putFloat("lon", cityLon);
 
   uint8_t dayMask = 0;
   for (int i = 0; i < 7; i++) {
@@ -213,11 +217,13 @@ void saveConfiguration() {
 
 void loadConfiguration() {
   preferences.begin("alarm-clock", true);
-  alarmHour = preferences.getInt("alarmHour", 6);
-  alarmMinute = preferences.getInt("alarmMinute", 30);
+  preferences.getBytes("alarmHours", alarmHours, 7 * sizeof(int));
+  preferences.getBytes("alarmMins", alarmMinutes, 7 * sizeof(int));
   isAlarmEnabled = preferences.getBool("isAlarmEnabled", true);
   gmtOffsetSeconds = preferences.getLong("gmtOffset", 3600);
   selectedRingtone = preferences.getInt("ringtone", 1);
+  cityLat = preferences.getFloat("lat", 49.75);
+  cityLon = preferences.getFloat("lon", 18.63);
 
   uint8_t dayMask = preferences.getUChar("alarmDays", 0x7F); // Domyślnie wszystkie dni
   for (int i = 0; i < 7; i++) {
@@ -231,20 +237,25 @@ void loadConfiguration() {
 // --- DYNAMICZNA STRONA WWW ---
 String buildRootPage() {
   String page = "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>";
-  page += "body{font-family:Arial,sans-serif}.container{max-width:400px;margin:auto;padding:20px}.form-group{margin-bottom:15px}label{display:block;margin-bottom:5px}input[type=number],select{width:100%;padding:8px;box-sizing:border-box}.btn{background-color:#4CAF50;color:#fff;padding:10px 15px;border:none;cursor:pointer;width:100%}";
+  page += "body{font-family:Arial,sans-serif}.container{max-width:400px;margin:auto;padding:20px}.form-group{margin-bottom:15px}label{display:block;margin-bottom:5px}input[type=number],select{width:100%;padding:8px;box-sizing:border-box}.btn{background-color:#4CAF50;color:#fff;padding:10px 15px;border:none;cursor:pointer;width:100%}.day-row{display:flex;align-items:center;margin-bottom:5px}.day-row input[type=number]{width:60px;margin-left:10px}";
   page += "</style></head><body><div class='container'><h2>Konfiguracja Budzika E-Ink</h2>";
   page += "<form action='/save' method='POST'>";
 
-  page += "<div class='form-group'><label for='alarm_hour'>Godzina alarmu:</label><input type='number' id='alarm_hour' name='alarm_hour' min='0' max='23' value='" + String(alarmHour) + "' required></div>";
-  page += "<div class='form-group'><label for='alarm_minute'>Minuta alarmu:</label><input type='number' id='alarm_minute' name='alarm_minute' min='0' max='59' value='" + String(alarmMinute) + "' required></div>";
-
-  page += "<div class='form-group'><label>Dni alarmu:</label><br>";
-  const char* dayLabels[] = {"Nie", "Pon", "Wt", "Sr", "Czw", "Pt", "Sob"};
+  page += "<h3>Ustawienia Alarmu</h3>";
+  const char* dayLabels[] = {"Niedziela", "Poniedzialek", "Wtorek", "Sroda", "Czwartek", "Piatek", "Sobota"};
   for (int i = 0; i < 7; i++) {
-    page += "<input type='checkbox' name='day" + String(i) + "' value='1'" + (alarmDays[i] ? " checked" : "") + "> " + dayLabels[i] + " ";
-    if (i == 3) page += "<br>";
+    page += "<div class='day-row'>";
+    page += "<input type='checkbox' name='day" + String(i) + "' value='1'" + (alarmDays[i] ? " checked" : "") + "> ";
+    page += "<label style='width:100px;margin-bottom:0;'>" + String(dayLabels[i]) + ":</label>";
+    page += "<input type='number' name='h" + String(i) + "' min='0' max='23' value='" + String(alarmHours[i]) + "'>";
+    page += "<span>:</span>";
+    page += "<input type='number' name='m" + String(i) + "' min='0' max='59' value='" + String(alarmMinutes[i]) + "'>";
+    page += "</div>";
   }
-  page += "</div>";
+
+  page += "<h3>Lokalizacja (Pogoda)</h3>";
+  page += "<div class='form-group'><label>Szerokosc (Lat):</label><input type='text' name='lat' value='" + String(cityLat, 4) + "'></div>";
+  page += "<div class='form-group'><label>Dlugosc (Lon):</label><input type='text' name='lon' value='" + String(cityLon, 4) + "'></div>";
 
   page += "<div class='form-group'><label for='timezone'>Strefa czasowa:</label><select id='timezone' name='timezone'>";
   for (int i = -12; i <= 12; i++) {
@@ -260,6 +271,7 @@ String buildRootPage() {
   page += "<option value='1'" + String(selectedRingtone == 1 ? " selected" : "") + ">Standardowy</option>";
   page += "<option value='2'" + String(selectedRingtone == 2 ? " selected" : "") + ">Melodia 1</option>";
   page += "<option value='3'" + String(selectedRingtone == 3 ? " selected" : "") + ">Melodia 2</option>";
+  page += "<option value='4'" + String(selectedRingtone == 4 ? " selected" : "") + ">Super Mario</option>";
   page += "</select></div>";
 
   page += "<button type='submit' class='btn'>Zapisz</button></form></div></body></html>";
@@ -269,13 +281,15 @@ String buildRootPage() {
 // --- FUNKCJE OBSŁUGI SERWERA WWW ---
 
 void handleSave() {
-  alarmHour = server.arg("alarm_hour").toInt();
-  alarmMinute = server.arg("alarm_minute").toInt();
   gmtOffsetSeconds = server.arg("timezone").toInt();
   selectedRingtone = server.arg("ringtone").toInt();
+  cityLat = server.arg("lat").toFloat();
+  cityLon = server.arg("lon").toFloat();
 
   for (int i = 0; i < 7; i++) {
     alarmDays[i] = server.hasArg("day" + String(i));
+    alarmHours[i] = server.arg("h" + String(i)).toInt();
+    alarmMinutes[i] = server.arg("m" + String(i)).toInt();
   }
 
   saveConfiguration();
@@ -288,6 +302,18 @@ void handleSave() {
 // --- FUNKCJE DZWONKA ---
 
 // Definicje nut
+#define NOTE_E6  1319
+#define NOTE_G6  1568
+#define NOTE_A6  1760
+#define NOTE_AS6 1865
+#define NOTE_B6  1976
+#define NOTE_C7  2093
+#define NOTE_D7  2349
+#define NOTE_E7  2637
+#define NOTE_F7  2794
+#define NOTE_G7  3136
+#define NOTE_A7  3520
+
 #define NOTE_G3  196
 #define NOTE_A3  220
 #define NOTE_B3  247
@@ -309,6 +335,22 @@ void playRingtone(int ringtone, bool reset) {
   // Melodia 2 (inna)
   int melody2_notes[] = { NOTE_A3, NOTE_B3, NOTE_C4, 0, NOTE_A3, NOTE_B3, NOTE_C4, 0 };
   int melody2_durations[] = { 8, 8, 8, 8, 8, 8, 8, 8 };
+
+  // Melodia 3 (Super Mario)
+  int mario_notes[] = {
+    NOTE_E7, NOTE_E7, 0, NOTE_E7, 0, NOTE_C7, NOTE_E7, 0, NOTE_G7, 0, 0, 0, NOTE_G6, 0, 0, 0,
+    NOTE_C7, 0, 0, NOTE_G6, 0, 0, NOTE_E6, 0, 0, NOTE_A6, 0, NOTE_B6, 0, NOTE_AS6, NOTE_A6, 0,
+    NOTE_G6, NOTE_E7, NOTE_G7, NOTE_A7, 0, NOTE_F7, NOTE_G7, 0, NOTE_E7, 0, NOTE_C7, NOTE_D7, NOTE_B6, 0, 0,
+    NOTE_C7, 0, 0, NOTE_G6, 0, 0, NOTE_E6, 0, 0, NOTE_A6, 0, NOTE_B6, 0, NOTE_AS6, NOTE_A6, 0,
+    NOTE_G6, NOTE_E7, NOTE_G7, NOTE_A7, 0, NOTE_F7, NOTE_G7, 0, NOTE_E7, 0, NOTE_C7, NOTE_D7, NOTE_B6, 0, 0
+  };
+  int mario_durations[] = {
+    12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+    12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+    9, 9, 9, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+    12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+    9, 9, 9, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12
+  };
 
   switch (ringtone) {
     case 1: // Dzwonek standardowy
@@ -334,6 +376,17 @@ void playRingtone(int ringtone, bool reset) {
         last_note_time = millis();
         melody_pos++;
         if (melody_pos >= sizeof(melody2_notes)/sizeof(int)) melody_pos = 0; // Zapętl
+      }
+      break;
+    case 4: // Super Mario
+      if (millis() > last_note_time + (1000 / mario_durations[melody_pos])) {
+        int note = mario_notes[melody_pos];
+        if (note == 0) noTone(SPEAKER_PIN);
+        else tone(SPEAKER_PIN, note);
+
+        last_note_time = millis();
+        melody_pos++;
+        if (melody_pos >= sizeof(mario_notes)/sizeof(int)) melody_pos = 0; // Zapętl
       }
       break;
   }
@@ -381,7 +434,9 @@ void drawTimeScreen(struct tm &timeinfo) {
     if (isAlarmEnabled) {
       u8g2Fonts.print("ALARM: ");
       char alarmTime[10];
-      sprintf(alarmTime, "%02d:%02d", alarmHour, alarmMinute);
+      // Pokaż alarm na dziś (lub następny jeśli dziś już był?)
+      // Dla uproszczenia pokażmy alarm zaplanowany na dziś.
+      sprintf(alarmTime, "%02d:%02d", alarmHours[timeinfo.tm_wday], alarmMinutes[timeinfo.tm_wday]);
       u8g2Fonts.print(alarmTime);
     } else {
       u8g2Fonts.print("ALARM OFF");
@@ -421,20 +476,28 @@ void handleButtons() {
         break;
 
       case STATE_SET_ALARM_HOUR:
-        if (buttonUp) alarmHour = (alarmHour + 1) % 24;
-        if (buttonDown) alarmHour = (alarmHour - 1 + 24) % 24;
-        if (buttonOk) currentState = STATE_SET_ALARM_MINUTE;
-        forceScreenUpdate = true; // Odśwież ekran
+        {
+          struct tm now;
+          getLocalTime(&now);
+          if (buttonUp) alarmHours[now.tm_wday] = (alarmHours[now.tm_wday] + 1) % 24;
+          if (buttonDown) alarmHours[now.tm_wday] = (alarmHours[now.tm_wday] - 1 + 24) % 24;
+          if (buttonOk) currentState = STATE_SET_ALARM_MINUTE;
+        }
+        forceScreenUpdate = true;
         break;
 
       case STATE_SET_ALARM_MINUTE:
-        if (buttonUp) alarmMinute = (alarmMinute + 1) % 60;
-        if (buttonDown) alarmMinute = (alarmMinute - 1 + 60) % 60;
-        if (buttonOk) {
-          currentState = STATE_DISPLAY_TIME;
-          saveConfiguration(); // Zapisz zmiany
+        {
+          struct tm now;
+          getLocalTime(&now);
+          if (buttonUp) alarmMinutes[now.tm_wday] = (alarmMinutes[now.tm_wday] + 1) % 60;
+          if (buttonDown) alarmMinutes[now.tm_wday] = (alarmMinutes[now.tm_wday] - 1 + 60) % 60;
+          if (buttonOk) {
+            currentState = STATE_DISPLAY_TIME;
+            saveConfiguration();
+          }
         }
-        forceScreenUpdate = true; // Odśwież ekran
+        forceScreenUpdate = true;
         break;
 
       case STATE_ALARM_RINGING:
@@ -449,6 +512,8 @@ void handleButtons() {
 }
 
 void drawSetAlarmScreen(bool isSettingHour) {
+  struct tm now;
+  getLocalTime(&now);
   display.setFullWindow();
   display.firstPage();
   do {
@@ -463,7 +528,7 @@ void drawSetAlarmScreen(bool isSettingHour) {
     u8g2Fonts.print("Ustawianie alarmu");
 
     char alarmTimeStr[6];
-    sprintf(alarmTimeStr, "%02d:%02d", alarmHour, alarmMinute);
+    sprintf(alarmTimeStr, "%02d:%02d", alarmHours[now.tm_wday], alarmMinutes[now.tm_wday]);
     u8g2Fonts.setFont(u8g2_font_logisoso58_tn);
     u8g2Fonts.setCursor(30, 90);
     u8g2Fonts.print(alarmTimeStr);
@@ -482,7 +547,8 @@ void drawSetAlarmScreen(bool isSettingHour) {
 void fetchWeather() {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
-    http.begin("https://api.open-meteo.com/v1/forecast?latitude=49.75&longitude=18.63&current_weather=true");
+    String url = "https://api.open-meteo.com/v1/forecast?latitude=" + String(cityLat, 4) + "&longitude=" + String(cityLon, 4) + "&current_weather=true";
+    http.begin(url);
     int httpCode = http.GET();
     if (httpCode == HTTP_CODE_OK) {
       String payload = http.getString();
@@ -515,18 +581,25 @@ String getWeatherDesc(int code) {
 long getMinutesToNextAlarm(struct tm &now) {
   if (!isAlarmEnabled) return -1;
   int currentDay = now.tm_wday;
-  int currentMin = now.tm_hour * 60 + now.tm_min;
-  int alarmMin = alarmHour * 60 + alarmMinute;
+  int currentTotalMins = now.tm_hour * 60 + now.tm_min;
 
-  for (int i = 0; i < 8; i++) {
-    int dayToCheck = (currentDay + i) % 7;
-    if (alarmDays[dayToCheck]) {
-      if (i == 0 && alarmMin > currentMin) {
-        return alarmMin - currentMin;
-      } else if (i > 0) {
-        return i * 1440 + alarmMin - currentMin;
+  for (int i = 0; i < 7; i++) {
+    int dayIdx = (currentDay + i) % 7;
+    if (alarmDays[dayIdx]) {
+      int alarmTotalMins = alarmHours[dayIdx] * 60 + alarmMinutes[dayIdx];
+      if (i == 0) {
+        if (alarmTotalMins > currentTotalMins) return alarmTotalMins - currentTotalMins;
+      } else {
+        return i * 1440 + alarmTotalMins - currentTotalMins;
       }
     }
   }
+
+  // Sprawdź jeszcze raz dzisiejszy alarm na za tydzień, jeśli jest jedynym aktywnym
+  if (alarmDays[currentDay]) {
+     int alarmTotalMins = alarmHours[currentDay] * 60 + alarmMinutes[currentDay];
+     return 7 * 1440 + alarmTotalMins - currentTotalMins;
+  }
+
   return -1;
 }
