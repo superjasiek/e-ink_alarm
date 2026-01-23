@@ -50,6 +50,16 @@ bool isAlarmEnabled = true;
 bool isAlarmRinging = false;
 bool forceScreenUpdate = false;
 
+// Prototypy funkcji
+void saveConfiguration();
+void loadConfiguration();
+String buildRootPage();
+void handleSave();
+void playRingtone(int ringtone, bool reset = false);
+void drawTimeScreen(struct tm &timeinfo);
+void handleButtons();
+void drawSetAlarmScreen(bool isSettingHour);
+
 
 void setup() {
   // --- INICJALIZACJA KOMUNIKACJI ---
@@ -192,7 +202,7 @@ String buildRootPage() {
     if (i * 3600 == gmtOffsetSeconds) {
       page += " selected";
     }
-    page += ">UTC" + (i >= 0 ? "+" : "") + String(i) + "</option>";
+    page += String(">UTC") + (i >= 0 ? "+" : "") + String(i) + "</option>";
   }
   page += "</select></div>";
 
