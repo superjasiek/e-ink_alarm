@@ -72,6 +72,7 @@ void playRingtone(int ringtone, bool reset = false);
 void drawTimeScreen(struct tm &timeinfo);
 void handleButtons();
 void drawSetAlarmScreen(bool isSettingHour);
+void drawCenteredText(const char* text, int y, const GFXfont* font, uint8_t size = 1);
 void fetchWeather();
 String getWeatherDesc(int code);
 long getMinutesToNextAlarm(struct tm &now);
@@ -80,7 +81,7 @@ long getMinutesToNextAlarm(struct tm &now);
 void setup() {
   // --- INICJALIZACJA KOMUNIKACJI ---
   Serial.begin(115200);
-  Serial.println("Budzik E-Ink startuje...");
+  Serial.println(F("Budzik E-Ink startuje..."));
 
   // Wczytaj konfigurację z pamięci
   loadConfiguration();
@@ -88,20 +89,20 @@ void setup() {
   // --- ŁĄCZENIE Z WIFI ---
   WiFiManager wifiManager;
   if (!wifiManager.autoConnect("BudzikE-Ink-Config")) {
-    Serial.println("Nie udalo sie polaczyc i osiagnieto limit czasu.");
+    Serial.println(F("Nie udalo sie polaczyc i osiagnieto limit czasu."));
     ESP.restart();
   }
-  Serial.println("Polaczono z WiFi!");
+  Serial.println(F("Polaczono z WiFi!"));
 
   // --- SYNCHRONIZACJA CZASU (NTP) ---
-  Serial.println("Pobieranie czasu z serwera NTP...");
+  Serial.println(F("Pobieranie czasu z serwera NTP..."));
   configTime(gmtOffsetSeconds, DAYLIGHT_OFFSET_SEC, NTP_SERVER);
   struct tm timeinfo;
   if (getLocalTime(&timeinfo)) {
-    Serial.println("Pobrano czas:");
+    Serial.println(F("Pobrano czas:"));
     Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
   } else {
-    Serial.println("Nie udalo sie zsynchronizowac czasu.");
+    Serial.println(F("Nie udalo sie zsynchronizowac czasu."));
   }
 
   // --- INICJALIZACJA SPRZĘTU ---
@@ -118,7 +119,7 @@ void setup() {
   // Głośnik
   pinMode(SPEAKER_PIN, OUTPUT);
 
-  Serial.println("Inicjalizacja sprzetu zakonczona.");
+  Serial.println(F("Inicjalizacja sprzetu zakonczona."));
 
   // --- SERWER WWW ---
   server.on("/", HTTP_GET, []() {
@@ -126,7 +127,7 @@ void setup() {
   });
   server.on("/save", HTTP_POST, handleSave);
   server.begin();
-  Serial.println("Serwer WWW uruchomiony.");
+  Serial.println(F("Serwer WWW uruchomiony."));
 }
 
 void loop() {
@@ -237,46 +238,46 @@ void loadConfiguration() {
 
 // --- DYNAMICZNA STRONA WWW ---
 String buildRootPage() {
-  String page = "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>";
-  page += "body{font-family:Arial,sans-serif}.container{max-width:400px;margin:auto;padding:20px}.form-group{margin-bottom:15px}label{display:block;margin-bottom:5px}input[type=number],select{width:100%;padding:8px;box-sizing:border-box}.btn{background-color:#4CAF50;color:#fff;padding:10px 15px;border:none;cursor:pointer;width:100%}.day-row{display:flex;align-items:center;margin-bottom:5px}.day-row input[type=number]{width:60px;margin-left:10px}";
-  page += "</style></head><body><div class='container'><h2>Konfiguracja Budzika E-Ink</h2>";
-  page += "<form action='/save' method='POST'>";
+  String page = F("<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>");
+  page += F("body{font-family:Arial,sans-serif}.container{max-width:400px;margin:auto;padding:20px}.form-group{margin-bottom:15px}label{display:block;margin-bottom:5px}input[type=number],select{width:100%;padding:8px;box-sizing:border-box}.btn{background-color:#4CAF50;color:#fff;padding:10px 15px;border:none;cursor:pointer;width:100%}.day-row{display:flex;align-items:center;margin-bottom:5px}.day-row input[type=number]{width:60px;margin-left:10px}");
+  page += F("</style></head><body><div class='container'><h2>Konfiguracja Budzika E-Ink</h2>");
+  page += F("<form action='/save' method='POST'>");
 
-  page += "<h3>Ustawienia Alarmu</h3>";
+  page += F("<h3>Ustawienia Alarmu</h3>");
   const char* dayLabels[] = {"Niedziela", "Poniedzialek", "Wtorek", "Sroda", "Czwartek", "Piatek", "Sobota"};
   for (int i = 0; i < 7; i++) {
-    page += "<div class='day-row'>";
-    page += "<input type='checkbox' name='day" + String(i) + "' value='1'" + (alarmDays[i] ? " checked" : "") + "> ";
-    page += "<label style='width:100px;margin-bottom:0;'>" + String(dayLabels[i]) + ":</label>";
-    page += "<input type='number' name='h" + String(i) + "' min='0' max='23' value='" + String(alarmHours[i]) + "'>";
-    page += "<span>:</span>";
-    page += "<input type='number' name='m" + String(i) + "' min='0' max='59' value='" + String(alarmMinutes[i]) + "'>";
-    page += "</div>";
+    page += F("<div class='day-row'>");
+    page += F("<input type='checkbox' name='day"); page += String(i); page += F("' value='1'"); page += (alarmDays[i] ? F(" checked") : F("")); page += F("> ");
+    page += F("<label style='width:100px;margin-bottom:0;'>"); page += String(dayLabels[i]); page += F(":</label>");
+    page += F("<input type='number' name='h"); page += String(i); page += F("' min='0' max='23' value='"); page += String(alarmHours[i]); page += F("'>");
+    page += F("<span>:</span>");
+    page += F("<input type='number' name='m"); page += String(i); page += F("' min='0' max='59' value='"); page += String(alarmMinutes[i]); page += F("'>");
+    page += F("</div>");
   }
 
-  page += "<h3>Lokalizacja (Pogoda)</h3>";
-  page += "<div class='form-group'><label>Miasto:</label><input type='text' name='city' value='" + cityName + "'></div>";
-  page += "<div class='form-group'><label>Szerokosc (Lat):</label><input type='text' name='lat' value='" + String(cityLat, 4) + "'></div>";
-  page += "<div class='form-group'><label>Dlugosc (Lon):</label><input type='text' name='lon' value='" + String(cityLon, 4) + "'></div>";
+  page += F("<h3>Lokalizacja (Pogoda)</h3>");
+  page += F("<div class='form-group'><label>Miasto:</label><input type='text' name='city' value='"); page += cityName; page += F("'></div>");
+  page += F("<div class='form-group'><label>Szerokosc (Lat):</label><input type='text' name='lat' value='"); page += String(cityLat, 4); page += F("'></div>");
+  page += F("<div class='form-group'><label>Dlugosc (Lon):</label><input type='text' name='lon' value='"); page += String(cityLon, 4); page += F("'></div>");
 
-  page += "<div class='form-group'><label for='timezone'>Strefa czasowa:</label><select id='timezone' name='timezone'>";
+  page += F("<div class='form-group'><label for='timezone'>Strefa czasowa:</label><select id='timezone' name='timezone'>");
   for (int i = -12; i <= 12; i++) {
-    page += "<option value='" + String(i * 3600) + "'";
+    page += F("<option value='"); page += String(i * 3600); page += F("'");
     if (i * 3600 == gmtOffsetSeconds) {
-      page += " selected";
+      page += F(" selected");
     }
-    page += String(">UTC") + (i >= 0 ? "+" : "") + String(i) + "</option>";
+    page += F(">UTC"); page += (i >= 0 ? F("+") : F("")); page += String(i); page += F("</option>");
   }
-  page += "</select></div>";
+  page += F("</select></div>");
 
-  page += "<div class='form-group'><label for='ringtone'>Dzwonek:</label><select id='ringtone' name='ringtone'>";
-  page += "<option value='1'" + String(selectedRingtone == 1 ? " selected" : "") + ">Standardowy</option>";
-  page += "<option value='2'" + String(selectedRingtone == 2 ? " selected" : "") + ">Melodia 1</option>";
-  page += "<option value='3'" + String(selectedRingtone == 3 ? " selected" : "") + ">Melodia 2</option>";
-  page += "<option value='4'" + String(selectedRingtone == 4 ? " selected" : "") + ">Super Mario</option>";
-  page += "</select></div>";
+  page += F("<div class='form-group'><label for='ringtone'>Dzwonek:</label><select id='ringtone' name='ringtone'>");
+  page += F("<option value='1'"); page += String(selectedRingtone == 1 ? F(" selected") : F("")); page += F(">Standardowy</option>");
+  page += F("<option value='2'"); page += String(selectedRingtone == 2 ? F(" selected") : F("")); page += F(">Melodia 1</option>");
+  page += F("<option value='3'"); page += String(selectedRingtone == 3 ? F(" selected") : F("")); page += F(">Melodia 2</option>");
+  page += F("<option value='4'"); page += String(selectedRingtone == 4 ? F(" selected") : F("")); page += F(">Super Mario</option>");
+  page += F("</select></div>");
 
-  page += "<button type='submit' class='btn'>Zapisz</button></form></div></body></html>";
+  page += F("<button type='submit' class='btn'>Zapisz</button></form></div></body></html>");
   return page;
 }
 
@@ -413,13 +414,7 @@ void drawTimeScreen(struct tm &timeinfo) {
     display.print(weatherStr);
 
     // 2. Główna godzina (wyśrodkowana)
-    display.setFont(&FreeMonoBold12pt7b);
-    display.setTextSize(3);
-    int16_t tbx, tby; uint16_t tbw, tbh;
-    display.getTextBounds(timeHourMin, 0, 0, &tbx, &tby, &tbw, &tbh);
-    display.setCursor((display.width() - tbw) / 2, 85);
-    display.print(timeHourMin);
-    display.setTextSize(1); // Powrót do standardowego rozmiaru
+    drawCenteredText(timeHourMin, 85, &FreeMonoBold12pt7b, 3);
 
     // 3. Lewy dolny róg - status alarmu
     display.setFont(&FreeMono9pt7b);
@@ -434,8 +429,9 @@ void drawTimeScreen(struct tm &timeinfo) {
     }
 
     // 4. Prawy dolny róg - czas do alarmu
-    display.getTextBounds(alarmRemaining.c_str(), 0, 0, &tbx, &tby, &tbw, &tbh);
-    display.setCursor(display.width() - tbw - 10, 122);
+    int16_t abx, aby; uint16_t abw, abh;
+    display.getTextBounds(alarmRemaining.c_str(), 0, 0, &abx, &aby, &abw, &abh);
+    display.setCursor(display.width() - abw - 10, 122);
     display.print(alarmRemaining);
 
   } while (display.nextPage());
@@ -511,17 +507,12 @@ void drawSetAlarmScreen(bool isSettingHour) {
     display.fillScreen(GxEPD_WHITE);
     display.setFont(&FreeMonoBold12pt7b);
     display.setCursor(10, 30);
-    display.print("Ustawianie alarmu");
+    display.print(F("Ustawianie alarmu"));
 
     char alarmTimeStr[6];
     sprintf(alarmTimeStr, "%02d:%02d", alarmHours[now.tm_wday], alarmMinutes[now.tm_wday]);
 
-    display.setTextSize(3);
-    int16_t tbx, tby; uint16_t tbw, tbh;
-    display.getTextBounds(alarmTimeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
-    display.setCursor(30, 90);
-    display.print(alarmTimeStr);
-    display.setTextSize(1);
+    drawCenteredText(alarmTimeStr, 90, &FreeMonoBold12pt7b, 3);
 
     if (isSettingHour) {
       display.fillRect(30, 95, 80, 5, GxEPD_BLACK);
@@ -530,6 +521,16 @@ void drawSetAlarmScreen(bool isSettingHour) {
     }
 
   } while (display.nextPage());
+}
+
+void drawCenteredText(const char* text, int y, const GFXfont* font, uint8_t size) {
+  display.setFont(font);
+  display.setTextSize(size);
+  int16_t tbx, tby; uint16_t tbw, tbh;
+  display.getTextBounds(text, 0, 0, &tbx, &tby, &tbw, &tbh);
+  display.setCursor((display.width() - tbw) / 2, y);
+  display.print(text);
+  display.setTextSize(1);
 }
 // --- FUNKCJE POGODY I LOGIKI ---
 
@@ -554,16 +555,16 @@ void fetchWeather() {
   }
 }
 
-String getWeatherDesc(int code) {
+const __FlashStringHelper* getWeatherDesc(int code) {
   switch (code) {
-    case 0: return "Bezchmurnie";
-    case 1: case 2: case 3: return "Zachmurzenie";
-    case 45: case 48: return "Mgla";
-    case 51: case 53: case 55: return "Mzywka";
-    case 61: case 63: case 65: return "Deszcz";
-    case 71: case 73: case 75: return "Snieg";
-    case 95: return "Burza";
-    default: return "Inna";
+    case 0: return F("Bezchmurnie");
+    case 1: case 2: case 3: return F("Zachmurzenie");
+    case 45: case 48: return F("Mgla");
+    case 51: case 53: case 55: return F("Mzywka");
+    case 61: case 63: case 65: return F("Deszcz");
+    case 71: case 73: case 75: return F("Snieg");
+    case 95: return F("Burza");
+    default: return F("Inna");
   }
 }
 
