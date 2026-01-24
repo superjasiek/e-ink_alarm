@@ -74,7 +74,7 @@ void handleButtons();
 void drawSetAlarmScreen(bool isSettingHour);
 void drawCenteredText(const char* text, int y, const GFXfont* font, uint8_t size = 1);
 void fetchWeather();
-String getWeatherDesc(int code);
+const __FlashStringHelper* getWeatherDesc(int code);
 long getMinutesToNextAlarm(struct tm &now);
 
 
