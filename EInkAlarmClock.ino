@@ -430,15 +430,20 @@ void drawTimeScreen(struct tm &timeinfo) {
     display.print(weatherStr);
 
     // 2. Główna godzina (wyśrodkowana)
-    drawCenteredText(timeHourMin, 105, &FreeSansBold24pt7b, 3);
+    drawCenteredText(timeHourMin, 85, &FreeSansBold12pt7b, 3);
 
     // 3. Lewy dolny róg - status alarmu
     display.setFont(&FreeSans9pt7b);
-    if (isAlarmEnabled && alarmDays[timeinfo.tm_wday]) {
+    if (minsToAlarm >= 0) {
       display.drawBitmap(10, 106, alarm_glyph_bell, 16, 16, GxEPD_BLACK);
       display.setCursor(30, 122);
+
+      // Oblicz godzinę następnego alarmu
+      time_t now_t = mktime(&timeinfo);
+      time_t next_t = now_t + (minsToAlarm * 60);
+      struct tm *alarmTm = localtime(&next_t);
       char alarmTime[10];
-      sprintf(alarmTime, "%02d:%02d", alarmHours[timeinfo.tm_wday], alarmMinutes[timeinfo.tm_wday]);
+      sprintf(alarmTime, "%02d:%02d", alarmTm->tm_hour, alarmTm->tm_min);
       display.print(alarmTime);
     } else {
       display.drawBitmap(10, 106, alarm_glyph_bell_outline, 16, 16, GxEPD_BLACK);
@@ -530,12 +535,12 @@ void drawSetAlarmScreen(bool isSettingHour) {
     sprintf(alarmTimeStr, "%02d:%02d", alarmHours[now.tm_wday], alarmMinutes[now.tm_wday]);
 
     // Ustawienie czcionki i rozmiaru dla obliczeń
-    display.setFont(&FreeSansBold24pt7b);
+    display.setFont(&FreeSansBold12pt7b);
     display.setTextSize(3);
     int16_t tbx, tby; uint16_t tbw, tbh;
     display.getTextBounds(alarmTimeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
     int startX = (display.width() - tbw) / 2;
-    int yPos = 105;
+    int yPos = 85;
 
     display.setCursor(startX, yPos);
     display.print(alarmTimeStr);
@@ -634,6 +639,6 @@ void drawAlarmRingingScreen() {
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
-    drawCenteredText("ALARM", 85, &FreeSansBold24pt7b, 2);
+    drawCenteredText("ALARM", 85, &FreeSansBold24pt7b, 1);
   } while (display.nextPage());
 }
