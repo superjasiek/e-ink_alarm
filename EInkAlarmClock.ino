@@ -16,6 +16,12 @@ const unsigned char alarm_glyph_bell[] PROGMEM = {
   0x1f, 0xf8, 0x1f, 0xf8, 0x3f, 0xfc, 0x7f, 0xfe, 0x7f, 0xfe, 0x00, 0x00, 0x03, 0xc0, 0x01, 0x80
 };
 
+// Glyph Bell Outline - Alarm Icon (16x16)
+const unsigned char alarm_glyph_bell_outline[] PROGMEM = {
+  0x01, 0x80, 0x02, 0x40, 0x04, 0x20, 0x04, 0x20, 0x04, 0x20, 0x04, 0x20, 0x08, 0x10, 0x08, 0x10,
+  0x10, 0x08, 0x10, 0x08, 0x20, 0x04, 0x7f, 0xfe, 0x00, 0x00, 0x00, 0x00, 0x03, 0xc0, 0x01, 0x80
+};
+
 // --- USTAWIENIA CZASU (NTP) ---
 const char* NTP_SERVER = "pool.ntp.org";
 const long  GMT_OFFSET_SEC = 3600; // Przesunięcie GMT w sekundach (np. 3600 dla UTC+1)
@@ -78,6 +84,7 @@ void playRingtone(int ringtone, bool reset = false);
 void drawTimeScreen(struct tm &timeinfo);
 void handleButtons();
 void drawSetAlarmScreen(bool isSettingHour);
+void drawAlarmRingingScreen();
 void drawCenteredText(const char* text, int y, const GFXfont* font, uint8_t size = 1);
 void fetchWeather();
 const __FlashStringHelper* getWeatherDesc(int code);
@@ -166,6 +173,7 @@ void loop() {
     isAlarmRinging = true;
     currentState = STATE_ALARM_RINGING;
     alarmCheckedForThisMinute = true;
+    forceScreenUpdate = true;
     playRingtone(selectedRingtone, true); // Zresetuj melodię
   }
 
@@ -189,6 +197,8 @@ void loop() {
       drawSetAlarmScreen(true);
     } else if (currentState == STATE_SET_ALARM_MINUTE) {
       drawSetAlarmScreen(false);
+    } else if (currentState == STATE_ALARM_RINGING) {
+      drawAlarmRingingScreen();
     } else {
       drawTimeScreen(timeinfo);
     }
@@ -420,19 +430,18 @@ void drawTimeScreen(struct tm &timeinfo) {
     display.print(weatherStr);
 
     // 2. Główna godzina (wyśrodkowana)
-    drawCenteredText(timeHourMin, 95, &FreeSansBold24pt7b, 2);
+    drawCenteredText(timeHourMin, 105, &FreeSansBold24pt7b, 3);
 
     // 3. Lewy dolny róg - status alarmu
     display.setFont(&FreeSans9pt7b);
-    if (isAlarmEnabled) {
+    if (isAlarmEnabled && alarmDays[timeinfo.tm_wday]) {
       display.drawBitmap(10, 106, alarm_glyph_bell, 16, 16, GxEPD_BLACK);
       display.setCursor(30, 122);
       char alarmTime[10];
       sprintf(alarmTime, "%02d:%02d", alarmHours[timeinfo.tm_wday], alarmMinutes[timeinfo.tm_wday]);
       display.print(alarmTime);
     } else {
-      display.setCursor(10, 122);
-      display.print("OFF");
+      display.drawBitmap(10, 106, alarm_glyph_bell_outline, 16, 16, GxEPD_BLACK);
     }
 
     // 4. Prawy dolny róg - czas do alarmu
@@ -499,6 +508,7 @@ void handleButtons() {
           isAlarmRinging = false;
           noTone(SPEAKER_PIN);
           currentState = STATE_DISPLAY_TIME;
+          forceScreenUpdate = true;
         }
         break;
     }
@@ -519,13 +529,32 @@ void drawSetAlarmScreen(bool isSettingHour) {
     char alarmTimeStr[6];
     sprintf(alarmTimeStr, "%02d:%02d", alarmHours[now.tm_wday], alarmMinutes[now.tm_wday]);
 
-    drawCenteredText(alarmTimeStr, 95, &FreeSansBold24pt7b, 2);
+    // Ustawienie czcionki i rozmiaru dla obliczeń
+    display.setFont(&FreeSansBold24pt7b);
+    display.setTextSize(3);
+    int16_t tbx, tby; uint16_t tbw, tbh;
+    display.getTextBounds(alarmTimeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
+    int startX = (display.width() - tbw) / 2;
+    int yPos = 105;
+
+    display.setCursor(startX, yPos);
+    display.print(alarmTimeStr);
 
     if (isSettingHour) {
-      display.fillRect(60, 105, 80, 5, GxEPD_BLACK);
+      char hStr[3]; sprintf(hStr, "%02d", alarmHours[now.tm_wday]);
+      int16_t hx, hy; uint16_t hw, hh;
+      display.getTextBounds(hStr, 0, 0, &hx, &hy, &hw, &hh);
+      display.fillRect(startX, yPos + 10, hw, 5, GxEPD_BLACK);
     } else {
-      display.fillRect(160, 105, 80, 5, GxEPD_BLACK);
+      char hmStr[4]; sprintf(hmStr, "%02d:", alarmHours[now.tm_wday]);
+      int16_t hmx, hmy; uint16_t hmw, hmh;
+      display.getTextBounds(hmStr, 0, 0, &hmx, &hmy, &hmw, &hmh);
+      char mStr[3]; sprintf(mStr, "%02d", alarmMinutes[now.tm_wday]);
+      int16_t mx, my; uint16_t mw, mh2;
+      display.getTextBounds(mStr, 0, 0, &mx, &my, &mw, &mh2);
+      display.fillRect(startX + hmw, yPos + 10, mw, 5, GxEPD_BLACK);
     }
+    display.setTextSize(1); // Powrót do standardowego rozmiaru
 
   } while (display.nextPage());
 }
@@ -599,4 +628,12 @@ long getMinutesToNextAlarm(struct tm &now) {
   }
 
   return -1;
+}
+
+void drawAlarmRingingScreen() {
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    drawCenteredText("ALARM", 85, &FreeSansBold24pt7b, 2);
+  } while (display.nextPage());
 }
