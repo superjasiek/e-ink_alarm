@@ -6,9 +6,16 @@
 #include <Preferences.h>
 #include <time.h>
 #include <GxEPD2_BW.h>
-#include <Fonts/FreeMonoBold12pt7b.h>
-#include <Fonts/FreeMonoBold9pt7b.h>
-#include <Fonts/FreeMono9pt7b.h>
+#include <Fonts/FreeSansBold12pt7b.h>
+#include <Fonts/FreeSans9pt7b.h>
+
+// Glyph F11E6 - Alarm Clock Icon (16x16)
+const unsigned char alarm_glyph_f11e6[] PROGMEM = {
+  0x03, 0xc0, 0x04, 0x20, 0x09, 0x90, 0x12, 0x48,
+  0x22, 0x44, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42,
+  0x42, 0x72, 0x42, 0x12, 0x40, 0x02, 0x20, 0x04,
+  0x10, 0x08, 0x08, 0x10, 0x07, 0xe0, 0x00, 0x00
+};
 
 // --- USTAWIENIA CZASU (NTP) ---
 const char* NTP_SERVER = "pool.ntp.org";
@@ -401,30 +408,31 @@ void drawTimeScreen(struct tm &timeinfo) {
 
   long minsToAlarm = getMinutesToNextAlarm(timeinfo);
   String alarmRemaining = (minsToAlarm >= 0) ?
-    "Alarm za: " + String(minsToAlarm / 60) + "h " + String(minsToAlarm % 60) + "m" : "Brak alarmu";
+    "Alarm za:" + String(minsToAlarm / 60) + "h" + String(minsToAlarm % 60) + "m" : "Brak alarmu";
 
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
 
     // 1. Pogoda u góry
-    display.setFont(&FreeMono9pt7b);
-    String weatherStr = cityName + ": " + String(currentTemp, 1) + "C, " + getWeatherDesc(weatherCode);
+    display.setFont(&FreeSans9pt7b);
+    String weatherStr = cityName + ":" + String(currentTemp, 1) + "C " + getWeatherDesc(weatherCode);
     display.setCursor(10, 20);
     display.print(weatherStr);
 
     // 2. Główna godzina (wyśrodkowana)
-    drawCenteredText(timeHourMin, 85, &FreeMonoBold12pt7b, 3);
+    drawCenteredText(timeHourMin, 85, &FreeSansBold12pt7b, 3);
 
     // 3. Lewy dolny róg - status alarmu
-    display.setFont(&FreeMono9pt7b);
-    display.setCursor(10, 122);
+    display.setFont(&FreeSans9pt7b);
     if (isAlarmEnabled) {
-      display.print("[!] "); // Zastępczy glyph dla dzwonka
+      display.drawBitmap(10, 106, alarm_glyph_f11e6, 16, 16, GxEPD_BLACK);
+      display.setCursor(30, 122);
       char alarmTime[10];
       sprintf(alarmTime, "%02d:%02d", alarmHours[timeinfo.tm_wday], alarmMinutes[timeinfo.tm_wday]);
       display.print(alarmTime);
     } else {
+      display.setCursor(10, 122);
       display.print("OFF");
     }
 
@@ -505,14 +513,14 @@ void drawSetAlarmScreen(bool isSettingHour) {
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
-    display.setFont(&FreeMonoBold12pt7b);
+    display.setFont(&FreeSansBold12pt7b);
     display.setCursor(10, 30);
     display.print(F("Ustawianie alarmu"));
 
     char alarmTimeStr[6];
     sprintf(alarmTimeStr, "%02d:%02d", alarmHours[now.tm_wday], alarmMinutes[now.tm_wday]);
 
-    drawCenteredText(alarmTimeStr, 90, &FreeMonoBold12pt7b, 3);
+    drawCenteredText(alarmTimeStr, 90, &FreeSansBold12pt7b, 3);
 
     if (isSettingHour) {
       display.fillRect(30, 95, 80, 5, GxEPD_BLACK);
