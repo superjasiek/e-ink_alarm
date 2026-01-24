@@ -7,7 +7,6 @@
 #include <time.h>
 #include <GxEPD2_BW.h>
 #include <Fonts/FreeMonoBold12pt7b.h>
-#include <Fonts/FreeMonoBold9pt7b.h>
 #include <Fonts/FreeMono9pt7b.h>
 
 // --- USTAWIENIA CZASU (NTP) ---
@@ -272,9 +271,7 @@ String buildRootPage() {
 
   page += F("<div class='form-group'><label for='ringtone'>Dzwonek:</label><select id='ringtone' name='ringtone'>");
   page += F("<option value='1'"); page += String(selectedRingtone == 1 ? F(" selected") : F("")); page += F(">Standardowy</option>");
-  page += F("<option value='2'"); page += String(selectedRingtone == 2 ? F(" selected") : F("")); page += F(">Melodia 1</option>");
-  page += F("<option value='3'"); page += String(selectedRingtone == 3 ? F(" selected") : F("")); page += F(">Melodia 2</option>");
-  page += F("<option value='4'"); page += String(selectedRingtone == 4 ? F(" selected") : F("")); page += F(">Super Mario</option>");
+  page += F("<option value='2'"); page += String(selectedRingtone == 2 ? F(" selected") : F("")); page += F(">Super Mario</option>");
   page += F("</select></div>");
 
   page += F("<button type='submit' class='btn'>Zapisz</button></form></div></body></html>");
@@ -332,21 +329,13 @@ void playRingtone(int ringtone, bool reset) {
     last_note_time = 0;
   }
 
-  // Melodia 1 (prosta)
-  int melody1_notes[] = { NOTE_C4, NOTE_G3, NOTE_G3, NOTE_A3, NOTE_G3, 0, NOTE_B3, NOTE_C4 };
-  int melody1_durations[] = { 4, 8, 8, 4, 4, 4, 4, 4 };
-
-  // Melodia 2 (inna)
-  int melody2_notes[] = { NOTE_A3, NOTE_B3, NOTE_C4, 0, NOTE_A3, NOTE_B3, NOTE_C4, 0 };
-  int melody2_durations[] = { 8, 8, 8, 8, 8, 8, 8, 8 };
-
-  // Melodia 3 (Super Mario) - bazowa sekwencja
-  static const int mario_notes[] = {
+  // Melodia 2 (Super Mario) - bazowa sekwencja
+  static const uint16_t mario_notes[] = {
     NOTE_E7, NOTE_E7, 0, NOTE_E7, 0, NOTE_C7, NOTE_E7, 0, NOTE_G7, 0, 0, 0, NOTE_G6, 0, 0, 0,
     NOTE_C7, 0, 0, NOTE_G6, 0, 0, NOTE_E6, 0, 0, NOTE_A6, 0, NOTE_B6, 0, NOTE_AS6, NOTE_A6, 0,
     NOTE_G6, NOTE_E7, NOTE_G7, NOTE_A7, 0, NOTE_F7, NOTE_G7, 0, NOTE_E7, 0, NOTE_C7, NOTE_D7, NOTE_B6, 0, 0
   };
-  static const int mario_durations[] = {
+  static const uint8_t mario_durations[] = {
     12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
     12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
     9, 9, 9, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12
@@ -356,29 +345,7 @@ void playRingtone(int ringtone, bool reset) {
     case 1: // Dzwonek standardowy
       tone(SPEAKER_PIN, 1000);
       break;
-    case 2: // Melodia 1
-      if (millis() > last_note_time + (1000 / melody1_durations[melody_pos])) {
-        int note = melody1_notes[melody_pos];
-        if (note == 0) noTone(SPEAKER_PIN);
-        else tone(SPEAKER_PIN, note);
-
-        last_note_time = millis();
-        melody_pos++;
-        if (melody_pos >= sizeof(melody1_notes)/sizeof(int)) melody_pos = 0; // Zapętl
-      }
-      break;
-    case 3: // Melodia 2
-       if (millis() > last_note_time + (1000 / melody2_durations[melody_pos])) {
-        int note = melody2_notes[melody_pos];
-        if (note == 0) noTone(SPEAKER_PIN);
-        else tone(SPEAKER_PIN, note);
-
-        last_note_time = millis();
-        melody_pos++;
-        if (melody_pos >= sizeof(melody2_notes)/sizeof(int)) melody_pos = 0; // Zapętl
-      }
-      break;
-    case 4: // Super Mario
+    case 2: // Super Mario
       if (millis() > last_note_time + (1000 / mario_durations[melody_pos])) {
         int note = mario_notes[melody_pos];
         if (note == 0) noTone(SPEAKER_PIN);
@@ -386,7 +353,7 @@ void playRingtone(int ringtone, bool reset) {
 
         last_note_time = millis();
         melody_pos++;
-        if (melody_pos >= sizeof(mario_notes)/sizeof(int)) melody_pos = 0; // Zapętl
+        if (melody_pos >= (sizeof(mario_notes) / sizeof(mario_notes[0]))) melody_pos = 0; // Zapętl
       }
       break;
   }
