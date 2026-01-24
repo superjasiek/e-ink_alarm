@@ -420,7 +420,7 @@ void drawTimeScreen(struct tm &timeinfo) {
     display.print(weatherStr);
 
     // 2. Główna godzina (wyśrodkowana)
-    drawCenteredText(timeHourMin, 80, &FreeSansBold24pt7b, 1);
+    drawCenteredText(timeHourMin, 95, &FreeSansBold24pt7b, 2);
 
     // 3. Lewy dolny róg - status alarmu
     display.setFont(&FreeSans9pt7b);
@@ -519,12 +519,12 @@ void drawSetAlarmScreen(bool isSettingHour) {
     char alarmTimeStr[6];
     sprintf(alarmTimeStr, "%02d:%02d", alarmHours[now.tm_wday], alarmMinutes[now.tm_wday]);
 
-    drawCenteredText(alarmTimeStr, 85, &FreeSansBold24pt7b, 1);
+    drawCenteredText(alarmTimeStr, 95, &FreeSansBold24pt7b, 2);
 
     if (isSettingHour) {
-      display.fillRect(95, 95, 45, 5, GxEPD_BLACK);
+      display.fillRect(60, 105, 80, 5, GxEPD_BLACK);
     } else {
-      display.fillRect(155, 95, 45, 5, GxEPD_BLACK);
+      display.fillRect(160, 105, 80, 5, GxEPD_BLACK);
     }
 
   } while (display.nextPage());
