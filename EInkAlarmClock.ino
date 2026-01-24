@@ -131,8 +131,7 @@ void setup() {
   pinMode(BUTTON_OK_PIN, INPUT_PULLUP);
 
   // Głośnik
-  ledcSetup(0, 1000, 8); // Channel 0, 1000Hz, 8-bit resolution
-  ledcAttachPin(SPEAKER_PIN, 0);
+  ledcAttach(SPEAKER_PIN, 1000, 8);
 
   Serial.println(F("Inicjalizacja sprzetu zakonczona."));
 
@@ -348,16 +347,16 @@ void handleSave() {
 
 void playTone(int frequency) {
   if (frequency == 0) {
-    ledcWrite(0, 0);
+    ledcWrite(SPEAKER_PIN, 0);
   } else {
-    ledcWriteTone(0, frequency);
+    ledcWriteTone(SPEAKER_PIN, frequency);
     uint32_t duty = (alarmVolume * 128) / 100;
-    ledcWrite(0, duty);
+    ledcWrite(SPEAKER_PIN, duty);
   }
 }
 
 void stopTone() {
-  ledcWrite(0, 0);
+  ledcWrite(SPEAKER_PIN, 0);
 }
 
 void playRingtone(int ringtone, bool reset) {
