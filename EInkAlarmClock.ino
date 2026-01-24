@@ -49,6 +49,7 @@ GxEPD2_BW<GxEPD2_290_T94_V2, GxEPD2_290_T94_V2::HEIGHT> display(GxEPD2_290_T94_V
 // Konfiguracja (ładowana z pamięci NVS)
 long gmtOffsetSeconds = 3600;
 int selectedRingtone = 1;
+int alarmVolume = 100;
 
 // Stany aplikacji (maszyna stanów)
 enum AppState {
@@ -130,7 +131,8 @@ void setup() {
   pinMode(BUTTON_OK_PIN, INPUT_PULLUP);
 
   // Głośnik
-  pinMode(SPEAKER_PIN, OUTPUT);
+  ledcSetup(0, 1000, 8); // Channel 0, 1000Hz, 8-bit resolution
+  ledcAttachPin(SPEAKER_PIN, 0);
 
   Serial.println(F("Inicjalizacja sprzetu zakonczona."));
 
@@ -218,6 +220,7 @@ void saveConfiguration() {
   preferences.putBool("isAlarmEnabled", isAlarmEnabled);
   preferences.putLong("gmtOffset", gmtOffsetSeconds);
   preferences.putInt("ringtone", selectedRingtone);
+  preferences.putInt("volume", alarmVolume);
   preferences.putFloat("lat", cityLat);
   preferences.putFloat("lon", cityLon);
   preferences.putString("cityName", cityName);
@@ -239,6 +242,7 @@ void loadConfiguration() {
   isAlarmEnabled = preferences.getBool("isAlarmEnabled", true);
   gmtOffsetSeconds = preferences.getLong("gmtOffset", 3600);
   selectedRingtone = preferences.getInt("ringtone", 1);
+  alarmVolume = preferences.getInt("volume", 100);
   cityLat = preferences.getFloat("lat", 49.75);
   cityLon = preferences.getFloat("lon", 18.63);
   cityName = preferences.getString("cityName", "Cieszyn");
@@ -293,6 +297,8 @@ String buildRootPage() {
   page += F("<option value='4'"); page += String(selectedRingtone == 4 ? F(" selected") : F("")); page += F(">Super Mario</option>");
   page += F("</select></div>");
 
+  page += F("<div class='form-group'><label>Glosnosc (0-100):</label><input type='range' name='vol' min='0' max='100' value='"); page += String(alarmVolume); page += F("'></div>");
+
   page += F("<button type='submit' class='btn'>Zapisz</button></form></div></body></html>");
   return page;
 }
@@ -302,6 +308,7 @@ String buildRootPage() {
 void handleSave() {
   gmtOffsetSeconds = server.arg("timezone").toInt();
   selectedRingtone = server.arg("ringtone").toInt();
+  alarmVolume = server.arg("vol").toInt();
   cityName = server.arg("city");
   cityLat = server.arg("lat").toFloat();
   cityLon = server.arg("lon").toFloat();
@@ -339,6 +346,20 @@ void handleSave() {
 #define NOTE_B3  247
 #define NOTE_C4  262
 
+void playTone(int frequency) {
+  if (frequency == 0) {
+    ledcWrite(0, 0);
+  } else {
+    ledcWriteTone(0, frequency);
+    uint32_t duty = (alarmVolume * 128) / 100;
+    ledcWrite(0, duty);
+  }
+}
+
+void stopTone() {
+  ledcWrite(0, 0);
+}
+
 void playRingtone(int ringtone, bool reset) {
   static int melody_pos = 0;
   static unsigned long last_note_time = 0;
@@ -346,6 +367,7 @@ void playRingtone(int ringtone, bool reset) {
   if (reset) {
     melody_pos = 0;
     last_note_time = 0;
+    stopTone();
   }
 
   // Melodia 1 (prosta)
@@ -370,13 +392,14 @@ void playRingtone(int ringtone, bool reset) {
 
   switch (ringtone) {
     case 1: // Dzwonek standardowy
-      tone(SPEAKER_PIN, 1000);
+      if ((millis() / 500) % 2 == 0) playTone(2500);
+      else stopTone();
       break;
     case 2: // Melodia 1
       if (millis() > last_note_time + (1000 / melody1_durations[melody_pos])) {
         int note = melody1_notes[melody_pos];
-        if (note == 0) noTone(SPEAKER_PIN);
-        else tone(SPEAKER_PIN, note);
+        if (note == 0) stopTone();
+        else playTone(note);
 
         last_note_time = millis();
         melody_pos++;
@@ -386,8 +409,8 @@ void playRingtone(int ringtone, bool reset) {
     case 3: // Melodia 2
        if (millis() > last_note_time + (1000 / melody2_durations[melody_pos])) {
         int note = melody2_notes[melody_pos];
-        if (note == 0) noTone(SPEAKER_PIN);
-        else tone(SPEAKER_PIN, note);
+        if (note == 0) stopTone();
+        else playTone(note);
 
         last_note_time = millis();
         melody_pos++;
@@ -397,8 +420,8 @@ void playRingtone(int ringtone, bool reset) {
     case 4: // Super Mario
       if (millis() > last_note_time + (1000 / mario_durations[melody_pos])) {
         int note = mario_notes[melody_pos];
-        if (note == 0) noTone(SPEAKER_PIN);
-        else tone(SPEAKER_PIN, note);
+        if (note == 0) stopTone();
+        else playTone(note);
 
         last_note_time = millis();
         melody_pos++;
@@ -511,7 +534,7 @@ void handleButtons() {
       case STATE_ALARM_RINGING:
         if (buttonUp || buttonDown || buttonOk) {
           isAlarmRinging = false;
-          noTone(SPEAKER_PIN);
+          stopTone();
           currentState = STATE_DISPLAY_TIME;
           forceScreenUpdate = true;
         }
