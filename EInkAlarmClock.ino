@@ -6,15 +6,14 @@
 #include <Preferences.h>
 #include <time.h>
 #include <GxEPD2_BW.h>
+#include <Fonts/FreeSansBold24pt7b.h>
 #include <Fonts/FreeSansBold12pt7b.h>
 #include <Fonts/FreeSans9pt7b.h>
 
-// Glyph F11E6 - Alarm Clock Icon (16x16)
-const unsigned char alarm_glyph_f11e6[] PROGMEM = {
-  0x03, 0xc0, 0x04, 0x20, 0x09, 0x90, 0x12, 0x48,
-  0x22, 0x44, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42,
-  0x42, 0x72, 0x42, 0x12, 0x40, 0x02, 0x20, 0x04,
-  0x10, 0x08, 0x08, 0x10, 0x07, 0xe0, 0x00, 0x00
+// Glyph Bell - Alarm Icon (16x16)
+const unsigned char alarm_glyph_bell[] PROGMEM = {
+  0x01, 0x80, 0x03, 0xc0, 0x07, 0xe0, 0x07, 0xe0, 0x07, 0xe0, 0x07, 0xe0, 0x0f, 0xf0, 0x0f, 0xf0,
+  0x1f, 0xf8, 0x1f, 0xf8, 0x3f, 0xfc, 0x7f, 0xfe, 0x7f, 0xfe, 0x00, 0x00, 0x03, 0xc0, 0x01, 0x80
 };
 
 // --- USTAWIENIA CZASU (NTP) ---
@@ -421,12 +420,12 @@ void drawTimeScreen(struct tm &timeinfo) {
     display.print(weatherStr);
 
     // 2. Główna godzina (wyśrodkowana)
-    drawCenteredText(timeHourMin, 85, &FreeSansBold12pt7b, 3);
+    drawCenteredText(timeHourMin, 80, &FreeSansBold24pt7b, 1);
 
     // 3. Lewy dolny róg - status alarmu
     display.setFont(&FreeSans9pt7b);
     if (isAlarmEnabled) {
-      display.drawBitmap(10, 106, alarm_glyph_f11e6, 16, 16, GxEPD_BLACK);
+      display.drawBitmap(10, 106, alarm_glyph_bell, 16, 16, GxEPD_BLACK);
       display.setCursor(30, 122);
       char alarmTime[10];
       sprintf(alarmTime, "%02d:%02d", alarmHours[timeinfo.tm_wday], alarmMinutes[timeinfo.tm_wday]);
@@ -520,12 +519,12 @@ void drawSetAlarmScreen(bool isSettingHour) {
     char alarmTimeStr[6];
     sprintf(alarmTimeStr, "%02d:%02d", alarmHours[now.tm_wday], alarmMinutes[now.tm_wday]);
 
-    drawCenteredText(alarmTimeStr, 90, &FreeSansBold12pt7b, 3);
+    drawCenteredText(alarmTimeStr, 85, &FreeSansBold24pt7b, 1);
 
     if (isSettingHour) {
-      display.fillRect(30, 95, 80, 5, GxEPD_BLACK);
+      display.fillRect(95, 95, 45, 5, GxEPD_BLACK);
     } else {
-      display.fillRect(135, 95, 80, 5, GxEPD_BLACK);
+      display.fillRect(155, 95, 45, 5, GxEPD_BLACK);
     }
 
   } while (display.nextPage());
