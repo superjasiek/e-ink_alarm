@@ -6,7 +6,6 @@
 #include <Preferences.h>
 #include <time.h>
 #include <GxEPD2_BW.h>
-#include <U8g2_for_Adafruit_GFX.h>
 #include <Fonts/FreeMonoBold12pt7b.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
 #include <Fonts/FreeMono9pt7b.h>
@@ -34,7 +33,6 @@ WebServer server(80);
 Preferences preferences;
 GxEPD2_BW<GxEPD2_290_T94_V2, GxEPD2_290_T94_V2::HEIGHT> display(GxEPD2_290_T94_V2(EPD_CS_PIN, EPD_DC_PIN, EPD_RST_PIN, EPD_BUSY_PIN)
 );
-U8G2_FOR_ADAFRUIT_GFX u8g2Fonts;
 
 // Konfiguracja (ładowana z pamięci NVS)
 long gmtOffsetSeconds = 3600;
@@ -63,6 +61,7 @@ int weatherCode = 0;
 unsigned long lastWeatherFetch = 0;
 float cityLat = 49.75;
 float cityLon = 18.63;
+String cityName = "Cieszyn";
 
 // Prototypy funkcji
 void saveConfiguration();
@@ -109,7 +108,7 @@ void setup() {
   // Wyświetlacz
   display.init(115200, true, 2, false);
   display.setRotation(1);
-  u8g2Fonts.begin(display);
+  display.setTextColor(GxEPD_BLACK);
 
   // Przyciski
   pinMode(BUTTON_UP_PIN, INPUT_PULLUP);
@@ -204,6 +203,7 @@ void saveConfiguration() {
   preferences.putInt("ringtone", selectedRingtone);
   preferences.putFloat("lat", cityLat);
   preferences.putFloat("lon", cityLon);
+  preferences.putString("cityName", cityName);
 
   uint8_t dayMask = 0;
   for (int i = 0; i < 7; i++) {
@@ -224,6 +224,7 @@ void loadConfiguration() {
   selectedRingtone = preferences.getInt("ringtone", 1);
   cityLat = preferences.getFloat("lat", 49.75);
   cityLon = preferences.getFloat("lon", 18.63);
+  cityName = preferences.getString("cityName", "Cieszyn");
 
   uint8_t dayMask = preferences.getUChar("alarmDays", 0x7F); // Domyślnie wszystkie dni
   for (int i = 0; i < 7; i++) {
@@ -254,6 +255,7 @@ String buildRootPage() {
   }
 
   page += "<h3>Lokalizacja (Pogoda)</h3>";
+  page += "<div class='form-group'><label>Miasto:</label><input type='text' name='city' value='" + cityName + "'></div>";
   page += "<div class='form-group'><label>Szerokosc (Lat):</label><input type='text' name='lat' value='" + String(cityLat, 4) + "'></div>";
   page += "<div class='form-group'><label>Dlugosc (Lon):</label><input type='text' name='lon' value='" + String(cityLon, 4) + "'></div>";
 
@@ -283,6 +285,7 @@ String buildRootPage() {
 void handleSave() {
   gmtOffsetSeconds = server.arg("timezone").toInt();
   selectedRingtone = server.arg("ringtone").toInt();
+  cityName = server.arg("city");
   cityLat = server.arg("lat").toFloat();
   cityLon = server.arg("lon").toFloat();
 
@@ -336,18 +339,14 @@ void playRingtone(int ringtone, bool reset) {
   int melody2_notes[] = { NOTE_A3, NOTE_B3, NOTE_C4, 0, NOTE_A3, NOTE_B3, NOTE_C4, 0 };
   int melody2_durations[] = { 8, 8, 8, 8, 8, 8, 8, 8 };
 
-  // Melodia 3 (Super Mario)
-  int mario_notes[] = {
+  // Melodia 3 (Super Mario) - bazowa sekwencja
+  static const int mario_notes[] = {
     NOTE_E7, NOTE_E7, 0, NOTE_E7, 0, NOTE_C7, NOTE_E7, 0, NOTE_G7, 0, 0, 0, NOTE_G6, 0, 0, 0,
-    NOTE_C7, 0, 0, NOTE_G6, 0, 0, NOTE_E6, 0, 0, NOTE_A6, 0, NOTE_B6, 0, NOTE_AS6, NOTE_A6, 0,
-    NOTE_G6, NOTE_E7, NOTE_G7, NOTE_A7, 0, NOTE_F7, NOTE_G7, 0, NOTE_E7, 0, NOTE_C7, NOTE_D7, NOTE_B6, 0, 0,
     NOTE_C7, 0, 0, NOTE_G6, 0, 0, NOTE_E6, 0, 0, NOTE_A6, 0, NOTE_B6, 0, NOTE_AS6, NOTE_A6, 0,
     NOTE_G6, NOTE_E7, NOTE_G7, NOTE_A7, 0, NOTE_F7, NOTE_G7, 0, NOTE_E7, 0, NOTE_C7, NOTE_D7, NOTE_B6, 0, 0
   };
-  int mario_durations[] = {
+  static const int mario_durations[] = {
     12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
-    12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
-    9, 9, 9, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
     12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
     9, 9, 9, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12
   };
@@ -399,53 +398,45 @@ void drawTimeScreen(struct tm &timeinfo) {
   char timeHourMin[6];
   strftime(timeHourMin, sizeof(timeHourMin), "%H:%M", &timeinfo);
 
-  // Oblicz czas do alarmu
   long minsToAlarm = getMinutesToNextAlarm(timeinfo);
-  String alarmRemaining = "";
-  if (minsToAlarm >= 0) {
-    alarmRemaining = "Alarm za: " + String(minsToAlarm / 60) + "h " + String(minsToAlarm % 60) + "m";
-  } else {
-    alarmRemaining = "Brak alarmu";
-  }
+  String alarmRemaining = (minsToAlarm >= 0) ?
+    "Alarm za: " + String(minsToAlarm / 60) + "h " + String(minsToAlarm % 60) + "m" : "Brak alarmu";
 
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
-    u8g2Fonts.setFontMode(1);
-    u8g2Fonts.setFontDirection(0);
-    u8g2Fonts.setForegroundColor(GxEPD_BLACK);
-    u8g2Fonts.setBackgroundColor(GxEPD_WHITE);
 
     // 1. Pogoda u góry
-    u8g2Fonts.setFont(u8g2_font_helvR12_tf);
-    String weatherStr = "Cieszyn: " + String(currentTemp, 1) + "C, " + getWeatherDesc(weatherCode);
-    u8g2Fonts.setCursor(10, 20);
-    u8g2Fonts.print(weatherStr);
+    display.setFont(&FreeMono9pt7b);
+    String weatherStr = cityName + ": " + String(currentTemp, 1) + "C, " + getWeatherDesc(weatherCode);
+    display.setCursor(10, 20);
+    display.print(weatherStr);
 
-    // 2. Główna godzina (pomniejszona i wyśrodkowana)
-    u8g2Fonts.setFont(u8g2_font_logisoso58_tn);
-    int16_t tw = u8g2Fonts.getUTF8Width(timeHourMin);
-    u8g2Fonts.setCursor((display.width() - tw) / 2, 90);
-    u8g2Fonts.print(timeHourMin);
+    // 2. Główna godzina (wyśrodkowana)
+    display.setFont(&FreeMonoBold12pt7b);
+    display.setTextSize(3);
+    int16_t tbx, tby; uint16_t tbw, tbh;
+    display.getTextBounds(timeHourMin, 0, 0, &tbx, &tby, &tbw, &tbh);
+    display.setCursor((display.width() - tbw) / 2, 85);
+    display.print(timeHourMin);
+    display.setTextSize(1); // Powrót do standardowego rozmiaru
 
     // 3. Lewy dolny róg - status alarmu
-    u8g2Fonts.setFont(u8g2_font_helvR12_tf);
-    u8g2Fonts.setCursor(10, 122);
+    display.setFont(&FreeMono9pt7b);
+    display.setCursor(10, 122);
     if (isAlarmEnabled) {
-      u8g2Fonts.print("ALARM: ");
+      display.print("[!] "); // Zastępczy glyph dla dzwonka
       char alarmTime[10];
-      // Pokaż alarm na dziś (lub następny jeśli dziś już był?)
-      // Dla uproszczenia pokażmy alarm zaplanowany na dziś.
       sprintf(alarmTime, "%02d:%02d", alarmHours[timeinfo.tm_wday], alarmMinutes[timeinfo.tm_wday]);
-      u8g2Fonts.print(alarmTime);
+      display.print(alarmTime);
     } else {
-      u8g2Fonts.print("ALARM OFF");
+      display.print("OFF");
     }
 
     // 4. Prawy dolny róg - czas do alarmu
-    int16_t trw = u8g2Fonts.getUTF8Width(alarmRemaining.c_str());
-    u8g2Fonts.setCursor(display.width() - trw - 10, 122);
-    u8g2Fonts.print(alarmRemaining);
+    display.getTextBounds(alarmRemaining.c_str(), 0, 0, &tbx, &tby, &tbw, &tbh);
+    display.setCursor(display.width() - tbw - 10, 122);
+    display.print(alarmRemaining);
 
   } while (display.nextPage());
 }
@@ -518,22 +509,20 @@ void drawSetAlarmScreen(bool isSettingHour) {
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
-    u8g2Fonts.setFontMode(1);
-    u8g2Fonts.setFontDirection(0);
-    u8g2Fonts.setForegroundColor(GxEPD_BLACK);
-    u8g2Fonts.setBackgroundColor(GxEPD_WHITE);
-
-    u8g2Fonts.setFont(u8g2_font_helvR14_tf);
-    u8g2Fonts.setCursor(10, 30);
-    u8g2Fonts.print("Ustawianie alarmu");
+    display.setFont(&FreeMonoBold12pt7b);
+    display.setCursor(10, 30);
+    display.print("Ustawianie alarmu");
 
     char alarmTimeStr[6];
     sprintf(alarmTimeStr, "%02d:%02d", alarmHours[now.tm_wday], alarmMinutes[now.tm_wday]);
-    u8g2Fonts.setFont(u8g2_font_logisoso58_tn);
-    u8g2Fonts.setCursor(30, 90);
-    u8g2Fonts.print(alarmTimeStr);
 
-    // Podkreślenie wybranej części (godziny lub minuty)
+    display.setTextSize(3);
+    int16_t tbx, tby; uint16_t tbw, tbh;
+    display.getTextBounds(alarmTimeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
+    display.setCursor(30, 90);
+    display.print(alarmTimeStr);
+    display.setTextSize(1);
+
     if (isSettingHour) {
       display.fillRect(30, 95, 80, 5, GxEPD_BLACK);
     } else {
