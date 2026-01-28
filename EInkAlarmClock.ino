@@ -50,15 +50,18 @@ GxEPD2_BW<GxEPD2_290_T94_V2, GxEPD2_290_T94_V2::HEIGHT> display(GxEPD2_290_T94_V
 long gmtOffsetSeconds = 3600;
 int selectedRingtone = 1;
 int alarmVolume = 100;
+const char* dayNamesShort[] = {"Nd", "Pn", "Wt", "Sr", "Cz", "Pt", "Sb"};
 
 // Stany aplikacji (maszyna stanów)
 enum AppState {
   STATE_DISPLAY_TIME,
+  STATE_SET_ALARM_DAY,
   STATE_SET_ALARM_HOUR,
   STATE_SET_ALARM_MINUTE,
   STATE_ALARM_RINGING
 };
 AppState currentState = STATE_DISPLAY_TIME;
+int settingAlarmDay = 0;
 
 // Zmienne alarmu
 int alarmHours[7] = {6, 6, 6, 6, 6, 6, 6};
@@ -84,7 +87,7 @@ void handleSave();
 void playRingtone(int ringtone, bool reset = false);
 void drawTimeScreen(struct tm &timeinfo);
 void handleButtons();
-void drawSetAlarmScreen(bool isSettingHour);
+void drawSetAlarmScreen();
 void drawAlarmRingingScreen();
 void drawCenteredText(const char* text, int y, const GFXfont* font, uint8_t size = 1);
 void fetchWeather();
@@ -195,10 +198,12 @@ void loop() {
     }
 
     // Wybierz odpowiedni ekran do narysowania
-    if (currentState == STATE_SET_ALARM_HOUR) {
-      drawSetAlarmScreen(true);
+    if (currentState == STATE_SET_ALARM_DAY) {
+      drawSetAlarmScreen();
+    } else if (currentState == STATE_SET_ALARM_HOUR) {
+      drawSetAlarmScreen();
     } else if (currentState == STATE_SET_ALARM_MINUTE) {
-      drawSetAlarmScreen(false);
+      drawSetAlarmScreen();
     } else if (currentState == STATE_ALARM_RINGING) {
       drawAlarmRingingScreen();
     } else {
@@ -446,11 +451,18 @@ void drawTimeScreen(struct tm &timeinfo) {
   do {
     display.fillScreen(GxEPD_WHITE);
 
-    // 1. Pogoda u góry
+    // 1. Pogoda i Data u góry
     display.setFont(&FreeSans9pt7b);
     String weatherStr = cityName + ":" + String(currentTemp, 1) + "C " + getWeatherDesc(weatherCode);
     display.setCursor(10, 20);
     display.print(weatherStr);
+
+    char dateStr[20];
+    sprintf(dateStr, "%s %02d.%02d", dayNamesShort[timeinfo.tm_wday], timeinfo.tm_mday, timeinfo.tm_mon + 1);
+    int16_t dx, dy; uint16_t dw, dh;
+    display.getTextBounds(dateStr, 0, 0, &dx, &dy, &dw, &dh);
+    display.setCursor(display.width() - dw - 10, 20);
+    display.print(dateStr);
 
     // 2. Główna godzina (wyśrodkowana)
     drawCenteredText(timeHourMin, 85, &FreeSansBold12pt7b, 3);
@@ -498,7 +510,10 @@ void handleButtons() {
     switch (currentState) {
       case STATE_DISPLAY_TIME:
         if (buttonOk) {
-          currentState = STATE_SET_ALARM_HOUR;
+          struct tm now;
+          getLocalTime(&now);
+          settingAlarmDay = now.tm_wday;
+          currentState = STATE_SET_ALARM_DAY;
           forceScreenUpdate = true;
         } else if (buttonUp) {
           isAlarmEnabled = !isAlarmEnabled;
@@ -506,12 +521,17 @@ void handleButtons() {
         }
         break;
 
+      case STATE_SET_ALARM_DAY:
+        if (buttonUp) settingAlarmDay = (settingAlarmDay + 1) % 7;
+        if (buttonDown) settingAlarmDay = (settingAlarmDay - 1 + 7) % 7;
+        if (buttonOk) currentState = STATE_SET_ALARM_HOUR;
+        forceScreenUpdate = true;
+        break;
+
       case STATE_SET_ALARM_HOUR:
         {
-          struct tm now;
-          getLocalTime(&now);
-          if (buttonUp) alarmHours[now.tm_wday] = (alarmHours[now.tm_wday] + 1) % 24;
-          if (buttonDown) alarmHours[now.tm_wday] = (alarmHours[now.tm_wday] - 1 + 24) % 24;
+          if (buttonUp) alarmHours[settingAlarmDay] = (alarmHours[settingAlarmDay] + 1) % 24;
+          if (buttonDown) alarmHours[settingAlarmDay] = (alarmHours[settingAlarmDay] - 1 + 24) % 24;
           if (buttonOk) currentState = STATE_SET_ALARM_MINUTE;
         }
         forceScreenUpdate = true;
@@ -519,10 +539,8 @@ void handleButtons() {
 
       case STATE_SET_ALARM_MINUTE:
         {
-          struct tm now;
-          getLocalTime(&now);
-          if (buttonUp) alarmMinutes[now.tm_wday] = (alarmMinutes[now.tm_wday] + 1) % 60;
-          if (buttonDown) alarmMinutes[now.tm_wday] = (alarmMinutes[now.tm_wday] - 1 + 60) % 60;
+          if (buttonUp) alarmMinutes[settingAlarmDay] = (alarmMinutes[settingAlarmDay] + 1) % 60;
+          if (buttonDown) alarmMinutes[settingAlarmDay] = (alarmMinutes[settingAlarmDay] - 1 + 60) % 60;
           if (buttonOk) {
             currentState = STATE_DISPLAY_TIME;
             saveConfiguration();
@@ -543,9 +561,7 @@ void handleButtons() {
   }
 }
 
-void drawSetAlarmScreen(bool isSettingHour) {
-  struct tm now;
-  getLocalTime(&now);
+void drawSetAlarmScreen() {
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
@@ -553,35 +569,39 @@ void drawSetAlarmScreen(bool isSettingHour) {
     display.setCursor(10, 30);
     display.print(F("Ustawianie alarmu"));
 
-    char alarmTimeStr[6];
-    sprintf(alarmTimeStr, "%02d:%02d", alarmHours[now.tm_wday], alarmMinutes[now.tm_wday]);
-
-    // Ustawienie czcionki i rozmiaru dla obliczeń
-    display.setFont(&FreeSansBold12pt7b);
-    display.setTextSize(3);
-    int16_t tbx, tby; uint16_t tbw, tbh;
-    display.getTextBounds(alarmTimeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
-    int startX = (display.width() - tbw) / 2;
-    int yPos = 85;
-
-    display.setCursor(startX, yPos);
-    display.print(alarmTimeStr);
-
-    if (isSettingHour) {
-      char hStr[3]; sprintf(hStr, "%02d", alarmHours[now.tm_wday]);
-      int16_t hx, hy; uint16_t hw, hh;
-      display.getTextBounds(hStr, 0, 0, &hx, &hy, &hw, &hh);
-      display.fillRect(startX, yPos + 10, hw, 5, GxEPD_BLACK);
+    if (currentState == STATE_SET_ALARM_DAY) {
+      drawCenteredText(dayNamesShort[settingAlarmDay], 95, &FreeSansBold24pt7b, 2);
+      display.fillRect((display.width() - 80) / 2, 105, 80, 5, GxEPD_BLACK);
     } else {
-      char hmStr[4]; sprintf(hmStr, "%02d:", alarmHours[now.tm_wday]);
-      int16_t hmx, hmy; uint16_t hmw, hmh;
-      display.getTextBounds(hmStr, 0, 0, &hmx, &hmy, &hmw, &hmh);
-      char mStr[3]; sprintf(mStr, "%02d", alarmMinutes[now.tm_wday]);
-      int16_t mx, my; uint16_t mw, mh2;
-      display.getTextBounds(mStr, 0, 0, &mx, &my, &mw, &mh2);
-      display.fillRect(startX + hmw, yPos + 10, mw, 5, GxEPD_BLACK);
+      char alarmTimeStr[6];
+      sprintf(alarmTimeStr, "%02d:%02d", alarmHours[settingAlarmDay], alarmMinutes[settingAlarmDay]);
+
+      display.setFont(&FreeSansBold12pt7b);
+      display.setTextSize(3);
+      int16_t tbx, tby; uint16_t tbw, tbh;
+      display.getTextBounds(alarmTimeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
+      int startX = (display.width() - tbw) / 2;
+      int yPos = 85;
+
+      display.setCursor(startX, yPos);
+      display.print(alarmTimeStr);
+
+      if (currentState == STATE_SET_ALARM_HOUR) {
+        char hStr[3]; sprintf(hStr, "%02d", alarmHours[settingAlarmDay]);
+        int16_t hx, hy; uint16_t hw, hh;
+        display.getTextBounds(hStr, 0, 0, &hx, &hy, &hw, &hh);
+        display.fillRect(startX, yPos + 10, hw, 5, GxEPD_BLACK);
+      } else if (currentState == STATE_SET_ALARM_MINUTE) {
+        char hmStr[4]; sprintf(hmStr, "%02d:", alarmHours[settingAlarmDay]);
+        int16_t hmx, hmy; uint16_t hmw, hmh;
+        display.getTextBounds(hmStr, 0, 0, &hmx, &hmy, &hmw, &hmh);
+        char mStr[3]; sprintf(mStr, "%02d", alarmMinutes[settingAlarmDay]);
+        int16_t mx, my; uint16_t mw, mh2;
+        display.getTextBounds(mStr, 0, 0, &mx, &my, &mw, &mh2);
+        display.fillRect(startX + hmw, yPos + 10, mw, 5, GxEPD_BLACK);
+      }
+      display.setTextSize(1);
     }
-    display.setTextSize(1); // Powrót do standardowego rozmiaru
 
   } while (display.nextPage());
 }
