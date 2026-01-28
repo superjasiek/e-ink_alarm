@@ -7,6 +7,7 @@
 #include <time.h>
 #include <GxEPD2_BW.h>
 #include <Fonts/FreeSansBold24pt7b.h>
+#include <Fonts/FreeSansBold18pt7b.h>
 #include <Fonts/FreeSansBold12pt7b.h>
 #include <Fonts/FreeSans9pt7b.h>
 
@@ -452,20 +453,27 @@ void drawTimeScreen(struct tm &timeinfo) {
     display.fillScreen(GxEPD_WHITE);
 
     // 1. Pogoda i Data u góry
-    display.setFont(&FreeSans9pt7b);
-    String weatherStr = cityName + ":" + String(currentTemp, 1) + "C " + getWeatherDesc(weatherCode);
+    // Dzień tygodnia (większy)
+    display.setFont(&FreeSansBold12pt7b);
     display.setCursor(10, 20);
-    display.print(weatherStr);
+    display.print(dayNamesShort[timeinfo.tm_wday]);
 
-    char dateStr[20];
-    sprintf(dateStr, "%s %02d.%02d", dayNamesShort[timeinfo.tm_wday], timeinfo.tm_mday, timeinfo.tm_mon + 1);
-    int16_t dx, dy; uint16_t dw, dh;
-    display.getTextBounds(dateStr, 0, 0, &dx, &dy, &dw, &dh);
-    display.setCursor(display.width() - dw - 10, 20);
+    // Data (mniejsza, pod dniem)
+    display.setFont(&FreeSans9pt7b);
+    char dateStr[10];
+    sprintf(dateStr, "%02d.%02d", timeinfo.tm_mday, timeinfo.tm_mon + 1);
+    display.setCursor(10, 36);
     display.print(dateStr);
 
+    // Pogoda (wyrównana do prawej)
+    String weatherStr = cityName + ":" + String(currentTemp, 1) + "C " + getWeatherDesc(weatherCode);
+    int16_t wx, wy; uint16_t ww, wh;
+    display.getTextBounds(weatherStr, 0, 0, &wx, &wy, &ww, &wh);
+    display.setCursor(display.width() - ww - 10, 25);
+    display.print(weatherStr);
+
     // 2. Główna godzina (wyśrodkowana)
-    drawCenteredText(timeHourMin, 85, &FreeSansBold12pt7b, 3);
+    drawCenteredText(timeHourMin, 90, &FreeSansBold12pt7b, 3);
 
     // 3. Lewy dolny róg - status alarmu
     display.setFont(&FreeSans9pt7b);
@@ -542,6 +550,7 @@ void handleButtons() {
           if (buttonUp) alarmMinutes[settingAlarmDay] = (alarmMinutes[settingAlarmDay] + 1) % 60;
           if (buttonDown) alarmMinutes[settingAlarmDay] = (alarmMinutes[settingAlarmDay] - 1 + 60) % 60;
           if (buttonOk) {
+            alarmDays[settingAlarmDay] = true;
             currentState = STATE_DISPLAY_TIME;
             saveConfiguration();
           }
@@ -570,7 +579,7 @@ void drawSetAlarmScreen() {
     display.print(F("Ustawianie alarmu"));
 
     if (currentState == STATE_SET_ALARM_DAY) {
-      drawCenteredText(dayNamesShort[settingAlarmDay], 95, &FreeSansBold24pt7b, 2);
+      drawCenteredText(dayNamesShort[settingAlarmDay], 95, &FreeSansBold18pt7b, 2);
       display.fillRect((display.width() - 80) / 2, 105, 80, 5, GxEPD_BLACK);
     } else {
       char alarmTimeStr[6];
