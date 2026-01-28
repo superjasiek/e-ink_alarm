@@ -452,25 +452,20 @@ void drawTimeScreen(struct tm &timeinfo) {
   do {
     display.fillScreen(GxEPD_WHITE);
 
-    // 1. Pogoda i Data u góry
-    // Dzień tygodnia (większy)
+    // 1. Pogoda (wyśrodkowana na górze)
+    String weatherStr = cityName + ":" + String(currentTemp, 1) + "C " + getWeatherDesc(weatherCode);
+    drawCenteredText(weatherStr.c_str(), 25, &FreeSans9pt7b, 1);
+
+    // 2. Dzień tygodnia i Data (obniżone do poziomu godziny, po lewej)
     display.setFont(&FreeSansBold12pt7b);
-    display.setCursor(10, 20);
+    display.setCursor(10, 75);
     display.print(dayNamesShort[timeinfo.tm_wday]);
 
-    // Data (mniejsza, pod dniem)
     display.setFont(&FreeSans9pt7b);
     char dateStr[10];
     sprintf(dateStr, "%02d.%02d", timeinfo.tm_mday, timeinfo.tm_mon + 1);
-    display.setCursor(10, 36);
+    display.setCursor(10, 95);
     display.print(dateStr);
-
-    // Pogoda (wyrównana do prawej)
-    String weatherStr = cityName + ":" + String(currentTemp, 1) + "C " + getWeatherDesc(weatherCode);
-    int16_t wx, wy; uint16_t ww, wh;
-    display.getTextBounds(weatherStr, 0, 0, &wx, &wy, &ww, &wh);
-    display.setCursor(display.width() - ww - 10, 25);
-    display.print(weatherStr);
 
     // 2. Główna godzina (wyśrodkowana)
     drawCenteredText(timeHourMin, 90, &FreeSansBold12pt7b, 3);
@@ -696,7 +691,7 @@ void drawAlarmRingingScreen() {
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
-    drawCenteredText("ALARM", 30, &FreeSansBold12pt7b, 2);
+    drawCenteredText("ALARM", 25, &FreeSansBold18pt7b, 1);
     if (timeHourMin[0] != '\0') {
       drawCenteredText(timeHourMin, 100, &FreeSansBold24pt7b, 2);
     }
