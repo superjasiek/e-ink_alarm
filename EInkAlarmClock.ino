@@ -667,9 +667,9 @@ void drawAlarmRingingScreen() {
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
-    drawCenteredText("ALARM", 45, &FreeSansBold24pt7b, 1);
+    drawCenteredText("ALARM", 30, &FreeSansBold12pt7b, 2);
     if (timeHourMin[0] != '\0') {
-      drawCenteredText(timeHourMin, 105, &FreeSansBold24pt7b, 2);
+      drawCenteredText(timeHourMin, 100, &FreeSansBold24pt7b, 2);
     }
   } while (display.nextPage());
 }
