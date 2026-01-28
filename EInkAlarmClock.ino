@@ -170,6 +170,7 @@ void loop() {
 
   // Logika alarmu - sprawdzana raz na minutę, uwzględniając wybrane dni
   if (isAlarmEnabled && alarmDays[timeinfo.tm_wday] && !isAlarmRinging && !alarmCheckedForThisMinute &&
+      currentState == STATE_DISPLAY_TIME &&
       timeinfo.tm_hour == alarmHours[timeinfo.tm_wday] && timeinfo.tm_min == alarmMinutes[timeinfo.tm_wday]) {
     isAlarmRinging = true;
     currentState = STATE_ALARM_RINGING;
@@ -187,7 +188,7 @@ void loop() {
     lastMinute = timeinfo.tm_min;
 
     // Pełne odświeżanie co godzinę, inaczej częściowe
-    if (timeinfo.tm_min == 0 || forceScreenUpdate) {
+    if (timeinfo.tm_min == 0) {
       display.setFullWindow();
     } else {
       display.setPartialWindow(0, 0, display.width(), display.height());
@@ -545,7 +546,6 @@ void handleButtons() {
 void drawSetAlarmScreen(bool isSettingHour) {
   struct tm now;
   getLocalTime(&now);
-  display.setFullWindow();
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
@@ -658,9 +658,18 @@ long getMinutesToNextAlarm(struct tm &now) {
 }
 
 void drawAlarmRingingScreen() {
+  struct tm timeinfo;
+  char timeHourMin[6] = "";
+  if (getLocalTime(&timeinfo)) {
+    strftime(timeHourMin, sizeof(timeHourMin), "%H:%M", &timeinfo);
+  }
+
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
-    drawCenteredText("ALARM", 85, &FreeSansBold24pt7b, 1);
+    drawCenteredText("ALARM", 45, &FreeSansBold24pt7b, 1);
+    if (timeHourMin[0] != '\0') {
+      drawCenteredText(timeHourMin, 105, &FreeSansBold24pt7b, 2);
+    }
   } while (display.nextPage());
 }
