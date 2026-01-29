@@ -188,14 +188,21 @@ void loop() {
   }
 
   // Odświeżanie wyświetlacza
+  static int partialCount = 0;
+  static int lastFullRefreshMin = -1;
+
   if ((timeinfo.tm_min != lastMinute && currentState == STATE_DISPLAY_TIME) || forceScreenUpdate) {
     lastMinute = timeinfo.tm_min;
 
-    // Pełne odświeżanie co godzinę, inaczej częściowe
-    if (timeinfo.tm_min == 0) {
+    // Pełne odświeżanie raz na godzinę (tm_min == 0) lub co 20 odświeżeń częściowych
+    if ((timeinfo.tm_min == 0 && lastFullRefreshMin != 0) || partialCount >= 20) {
       display.setFullWindow();
+      partialCount = 0;
+      lastFullRefreshMin = timeinfo.tm_min;
     } else {
       display.setPartialWindow(0, 0, display.width(), display.height());
+      partialCount++;
+      if (timeinfo.tm_min != 0) lastFullRefreshMin = -1;
     }
 
     // Wybierz odpowiedni ekran do narysowania
@@ -477,7 +484,8 @@ void drawTimeScreen(struct tm &timeinfo) {
       display.setCursor(30, 122);
 
       // Oblicz godzinę następnego alarmu
-      time_t now_t = mktime(&timeinfo);
+      struct tm tempTime = timeinfo;
+      time_t now_t = mktime(&tempTime);
       time_t next_t = now_t + (minsToAlarm * 60);
       struct tm *alarmTm = localtime(&next_t);
       char alarmTime[10];
@@ -566,6 +574,15 @@ void handleButtons() {
 }
 
 void drawSetAlarmScreen() {
+  struct tm timeinfo;
+  String alarmRemaining = "Brak alarmu";
+  if (getLocalTime(&timeinfo)) {
+    long minsToAlarm = getMinutesToNextAlarm(timeinfo);
+    if (minsToAlarm >= 0) {
+      alarmRemaining = "Alarm za:" + String(minsToAlarm / 60) + "h" + String(minsToAlarm % 60) + "m";
+    }
+  }
+
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
@@ -606,6 +623,13 @@ void drawSetAlarmScreen() {
       }
       display.setTextSize(1);
     }
+
+    // Wyświetl czas do alarmu na dole
+    display.setFont(&FreeSans9pt7b);
+    int16_t abx, aby; uint16_t abw, abh;
+    display.getTextBounds(alarmRemaining.c_str(), 0, 0, &abx, &aby, &abw, &abh);
+    display.setCursor(display.width() - abw - 10, 122);
+    display.print(alarmRemaining);
 
   } while (display.nextPage());
 }
