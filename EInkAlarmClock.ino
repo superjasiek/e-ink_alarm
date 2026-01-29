@@ -200,7 +200,8 @@ void loop() {
       partialCount = 0;
       lastFullRefreshMin = timeinfo.tm_min;
     } else {
-      display.setPartialWindow(0, 0, display.width(), display.height());
+      // Wymuszenie trybu szybkiego odświeżania na niektórych panelach V2 poprzez okno mniejsze o 1px
+      display.setPartialWindow(0, 0, display.width(), display.height() - 1);
       partialCount++;
       if (timeinfo.tm_min != 0) lastFullRefreshMin = -1;
     }
@@ -461,21 +462,21 @@ void drawTimeScreen(struct tm &timeinfo) {
 
     // 1. Pogoda (wyśrodkowana na górze)
     String weatherStr = cityName + ":" + String(currentTemp, 1) + "C " + getWeatherDesc(weatherCode);
-    drawCenteredText(weatherStr.c_str(), 25, &FreeSans9pt7b, 1);
+    drawCenteredText(weatherStr.c_str(), 18, &FreeSans9pt7b, 1);
 
     // 2. Dzień tygodnia i Data (obniżone do poziomu godziny, po lewej)
     display.setFont(&FreeSansBold12pt7b);
-    display.setCursor(10, 75);
+    display.setCursor(10, 85);
     display.print(dayNamesShort[timeinfo.tm_wday]);
 
     display.setFont(&FreeSans9pt7b);
     char dateStr[10];
     sprintf(dateStr, "%02d.%02d", timeinfo.tm_mday, timeinfo.tm_mon + 1);
-    display.setCursor(10, 95);
+    display.setCursor(10, 105);
     display.print(dateStr);
 
     // 2. Główna godzina (wyśrodkowana)
-    drawCenteredText(timeHourMin, 90, &FreeSansBold12pt7b, 3);
+    drawCenteredText(timeHourMin, 95, &FreeSansBold12pt7b, 3);
 
     // 3. Lewy dolny róg - status alarmu
     display.setFont(&FreeSans9pt7b);
@@ -577,10 +578,13 @@ void drawSetAlarmScreen() {
   struct tm timeinfo;
   String alarmRemaining = "Brak alarmu";
   if (getLocalTime(&timeinfo)) {
-    long minsToAlarm = getMinutesToNextAlarm(timeinfo);
-    if (minsToAlarm >= 0) {
-      alarmRemaining = "Alarm za:" + String(minsToAlarm / 60) + "h" + String(minsToAlarm % 60) + "m";
-    }
+    // Oblicz czas do alarmu dla aktualnie wybranego dnia w ustawieniach
+    int currentTotalMins = timeinfo.tm_hour * 60 + timeinfo.tm_min;
+    int alarmTotalMins = alarmHours[settingAlarmDay] * 60 + alarmMinutes[settingAlarmDay];
+    int daysDiff = (settingAlarmDay - timeinfo.tm_wday + 7) % 7;
+    if (daysDiff == 0 && alarmTotalMins <= currentTotalMins) daysDiff = 7;
+    long minsToSelected = (long)daysDiff * 1440 + alarmTotalMins - currentTotalMins;
+    alarmRemaining = "Alarm za:" + String(minsToSelected / 60) + "h" + String(minsToSelected % 60) + "m";
   }
 
   display.firstPage();
@@ -715,7 +719,7 @@ void drawAlarmRingingScreen() {
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
-    drawCenteredText("ALARM", 25, &FreeSansBold18pt7b, 1);
+    drawCenteredText("ALARM", 20, &FreeSansBold12pt7b, 1);
     if (timeHourMin[0] != '\0') {
       drawCenteredText(timeHourMin, 100, &FreeSansBold24pt7b, 2);
     }
