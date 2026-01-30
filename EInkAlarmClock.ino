@@ -63,6 +63,8 @@ enum AppState {
 };
 AppState currentState = STATE_DISPLAY_TIME;
 int settingAlarmDay = 0;
+bool isTestingRingtone = false;
+int testRingtoneIndex = 1;
 
 // Zmienne alarmu
 int alarmHours[7] = {6, 6, 6, 6, 6, 6, 6};
@@ -145,6 +147,17 @@ void setup() {
     server.send(200, "text/html", buildRootPage());
   });
   server.on("/save", HTTP_POST, handleSave);
+  server.on("/test", HTTP_GET, []() {
+    testRingtoneIndex = server.arg("ringtone").toInt();
+    isTestingRingtone = true;
+    playRingtone(testRingtoneIndex, true); // Resetuj melodię
+    server.send(200, "text/plain", "OK");
+  });
+  server.on("/stop", HTTP_GET, []() {
+    isTestingRingtone = false;
+    stopTone();
+    server.send(200, "text/plain", "OK");
+  });
   server.begin();
   Serial.println(F("Serwer WWW uruchomiony."));
 }
@@ -186,6 +199,8 @@ void loop() {
 
   if (isAlarmRinging) {
     playRingtone(selectedRingtone);
+  } else if (isTestingRingtone) {
+    playRingtone(testRingtoneIndex);
   }
 
   // Odświeżanie wyświetlacza
@@ -299,12 +314,18 @@ String buildRootPage() {
   }
   page += F("</select></div>");
 
-  page += F("<div class='form-group'><label for='ringtone'>Dzwonek:</label><select id='ringtone' name='ringtone'>");
+  page += F("<div class='form-group'><label for='ringtone'>Dzwonek:</label>");
+  page += F("<div style='display:flex;gap:10px;'><select id='ringtone' name='ringtone' style='flex-grow:1;'>");
   page += F("<option value='1'"); page += String(selectedRingtone == 1 ? F(" selected") : F("")); page += F(">Standardowy</option>");
   page += F("<option value='2'"); page += String(selectedRingtone == 2 ? F(" selected") : F("")); page += F(">Melodia 1</option>");
   page += F("<option value='3'"); page += String(selectedRingtone == 3 ? F(" selected") : F("")); page += F(">Melodia 2</option>");
   page += F("<option value='4'"); page += String(selectedRingtone == 4 ? F(" selected") : F("")); page += F(">Super Mario</option>");
-  page += F("</select></div>");
+  page += F("<option value='5'"); page += String(selectedRingtone == 5 ? F(" selected") : F("")); page += F(">Twinkle Twinkle</option>");
+  page += F("<option value='6'"); page += String(selectedRingtone == 6 ? F(" selected") : F("")); page += F(">Imperial March</option>");
+  page += F("</select>");
+  page += F("<button type='button' onclick='testRingtone()' style='padding:5px;'>Testuj</button>");
+  page += F("<button type='button' onclick='stopRingtone()' style='padding:5px;'>Stop</button></div></div>");
+  page += F("<script>function testRingtone(){const r=document.getElementById(\"ringtone\").value;fetch(\"/test?ringtone=\"+r)}function stopRingtone(){fetch(\"/stop\")}</script>");
 
   page += F("<div class='form-group'><label>Glosnosc (0-100):</label><input type='range' name='vol' min='0' max='100' value='"); page += String(alarmVolume); page += F("'></div>");
 
@@ -354,6 +375,15 @@ void handleSave() {
 #define NOTE_A3  220
 #define NOTE_B3  247
 #define NOTE_C4  262
+#define NOTE_D4  294
+#define NOTE_E4  330
+#define NOTE_F4  349
+#define NOTE_G4  392
+#define NOTE_A4  440
+#define NOTE_B4  494
+#define NOTE_C5  523
+#define NOTE_DS4 311
+#define NOTE_AS3 233
 
 void playTone(int frequency) {
   if (frequency == 0) {
@@ -399,6 +429,14 @@ void playRingtone(int ringtone, bool reset) {
     9, 9, 9, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12
   };
 
+  // Melodia 5 (Twinkle Twinkle)
+  int twinkle_notes[] = { NOTE_C4, NOTE_C4, NOTE_G4, NOTE_G4, NOTE_A4, NOTE_A4, NOTE_G4, NOTE_F4, NOTE_F4, NOTE_E4, NOTE_E4, NOTE_D4, NOTE_D4, NOTE_C4 };
+  int twinkle_durations[] = { 4, 4, 4, 4, 4, 4, 2, 4, 4, 4, 4, 4, 4, 2 };
+
+  // Melodia 6 (Imperial March)
+  int imperial_notes[] = { NOTE_G4, NOTE_G4, NOTE_G4, NOTE_DS4, NOTE_AS3, NOTE_G4, NOTE_DS4, NOTE_AS3, NOTE_G4 };
+  int imperial_durations[] = { 4, 4, 4, 8, 16, 4, 8, 16, 2 };
+
   switch (ringtone) {
     case 1: // Dzwonek standardowy
       if ((millis() / 500) % 2 == 0) playTone(2500);
@@ -435,6 +473,28 @@ void playRingtone(int ringtone, bool reset) {
         last_note_time = millis();
         melody_pos++;
         if (melody_pos >= sizeof(mario_notes)/sizeof(int)) melody_pos = 0; // Zapętl
+      }
+      break;
+    case 5: // Twinkle Twinkle
+      if (millis() > last_note_time + (1000 / twinkle_durations[melody_pos])) {
+        int note = twinkle_notes[melody_pos];
+        if (note == 0) stopTone();
+        else playTone(note);
+
+        last_note_time = millis();
+        melody_pos++;
+        if (melody_pos >= sizeof(twinkle_notes)/sizeof(int)) melody_pos = 0; // Zapętl
+      }
+      break;
+    case 6: // Imperial March
+      if (millis() > last_note_time + (1000 / imperial_durations[melody_pos])) {
+        int note = imperial_notes[melody_pos];
+        if (note == 0) stopTone();
+        else playTone(note);
+
+        last_note_time = millis();
+        melody_pos++;
+        if (melody_pos >= sizeof(imperial_notes)/sizeof(int)) melody_pos = 0; // Zapętl
       }
       break;
   }
