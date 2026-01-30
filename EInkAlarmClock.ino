@@ -86,10 +86,10 @@ void loadConfiguration();
 String buildRootPage();
 void handleSave();
 void playRingtone(int ringtone, bool reset = false);
-void drawTimeScreen(struct tm &timeinfo);
+void drawTimeContent(struct tm &timeinfo);
 void handleButtons();
-void drawSetAlarmScreen();
-void drawAlarmRingingScreen();
+void drawSetAlarmContent();
+void drawAlarmRingingContent();
 void drawCenteredText(const char* text, int y, const GFXfont* font, uint8_t size = 1);
 void fetchWeather();
 const __FlashStringHelper* getWeatherDesc(int code);
@@ -125,7 +125,7 @@ void setup() {
 
   // --- INICJALIZACJA SPRZĘTU ---
   // Wyświetlacz
-  display.init(115200, true, 2, false);
+  display.init(115200, true, 10, false);
   display.setRotation(1);
   display.setTextColor(GxEPD_BLACK);
 
@@ -188,28 +188,30 @@ void loop() {
   }
 
   // Odświeżanie wyświetlacza
-  if ((timeinfo.tm_min != lastMinute && currentState == STATE_DISPLAY_TIME) || forceScreenUpdate) {
+  bool minuteChanged = (timeinfo.tm_min != lastMinute);
+  if ((minuteChanged && currentState == STATE_DISPLAY_TIME) || forceScreenUpdate) {
+    // Pełne odświeżanie tylko gdy minuta zmienia się na 0 lub przy pierwszym uruchomieniu
+    bool isFullRefresh = (minuteChanged && timeinfo.tm_min == 0) || (lastMinute == -1);
     lastMinute = timeinfo.tm_min;
 
-    // Pełne odświeżanie co godzinę, inaczej częściowe
-    if (timeinfo.tm_min == 0) {
+    if (isFullRefresh) {
       display.setFullWindow();
     } else {
       display.setPartialWindow(0, 0, display.width(), display.height());
     }
 
-    // Wybierz odpowiedni ekran do narysowania
-    if (currentState == STATE_SET_ALARM_DAY) {
-      drawSetAlarmScreen();
-    } else if (currentState == STATE_SET_ALARM_HOUR) {
-      drawSetAlarmScreen();
-    } else if (currentState == STATE_SET_ALARM_MINUTE) {
-      drawSetAlarmScreen();
-    } else if (currentState == STATE_ALARM_RINGING) {
-      drawAlarmRingingScreen();
-    } else {
-      drawTimeScreen(timeinfo);
-    }
+    display.firstPage();
+    do {
+      display.fillScreen(GxEPD_WHITE);
+      // Wybierz odpowiedni ekran do narysowania
+      if (currentState == STATE_SET_ALARM_DAY || currentState == STATE_SET_ALARM_HOUR || currentState == STATE_SET_ALARM_MINUTE) {
+        drawSetAlarmContent();
+      } else if (currentState == STATE_ALARM_RINGING) {
+        drawAlarmRingingContent();
+      } else {
+        drawTimeContent(timeinfo);
+      }
+    } while (display.nextPage());
 
     forceScreenUpdate = false; // Zresetuj flagę
   }
@@ -440,7 +442,7 @@ void playRingtone(int ringtone, bool reset) {
 
 // --- FUNKCJE POMOCNICZE ---
 
-void drawTimeScreen(struct tm &timeinfo) {
+void drawTimeContent(struct tm &timeinfo) {
   char timeHourMin[6];
   strftime(timeHourMin, sizeof(timeHourMin), "%H:%M", &timeinfo);
 
@@ -448,57 +450,51 @@ void drawTimeScreen(struct tm &timeinfo) {
   String alarmRemaining = (minsToAlarm >= 0) ?
     "Alarm za:" + String(minsToAlarm / 60) + "h" + String(minsToAlarm % 60) + "m" : "Brak alarmu";
 
-  display.firstPage();
-  do {
-    display.fillScreen(GxEPD_WHITE);
+  // 1. Pogoda i Data u góry
+  // Dzień tygodnia (większy)
+  display.setFont(&FreeSansBold12pt7b);
+  display.setCursor(10, 20);
+  display.print(dayNamesShort[timeinfo.tm_wday]);
 
-    // 1. Pogoda i Data u góry
-    // Dzień tygodnia (większy)
-    display.setFont(&FreeSansBold12pt7b);
-    display.setCursor(10, 20);
-    display.print(dayNamesShort[timeinfo.tm_wday]);
+  // Data (mniejsza, pod dniem)
+  display.setFont(&FreeSans9pt7b);
+  char dateStr[10];
+  sprintf(dateStr, "%02d.%02d", timeinfo.tm_mday, timeinfo.tm_mon + 1);
+  display.setCursor(10, 36);
+  display.print(dateStr);
 
-    // Data (mniejsza, pod dniem)
-    display.setFont(&FreeSans9pt7b);
-    char dateStr[10];
-    sprintf(dateStr, "%02d.%02d", timeinfo.tm_mday, timeinfo.tm_mon + 1);
-    display.setCursor(10, 36);
-    display.print(dateStr);
+  // Pogoda (wyrównana do prawej)
+  String weatherStr = cityName + ":" + String(currentTemp, 1) + "C " + getWeatherDesc(weatherCode);
+  int16_t wx, wy; uint16_t ww, wh;
+  display.getTextBounds(weatherStr, 0, 0, &wx, &wy, &ww, &wh);
+  display.setCursor(display.width() - ww - 10, 25);
+  display.print(weatherStr);
 
-    // Pogoda (wyrównana do prawej)
-    String weatherStr = cityName + ":" + String(currentTemp, 1) + "C " + getWeatherDesc(weatherCode);
-    int16_t wx, wy; uint16_t ww, wh;
-    display.getTextBounds(weatherStr, 0, 0, &wx, &wy, &ww, &wh);
-    display.setCursor(display.width() - ww - 10, 25);
-    display.print(weatherStr);
+  // 2. Główna godzina (wyśrodkowana)
+  drawCenteredText(timeHourMin, 90, &FreeSansBold12pt7b, 3);
 
-    // 2. Główna godzina (wyśrodkowana)
-    drawCenteredText(timeHourMin, 90, &FreeSansBold12pt7b, 3);
+  // 3. Lewy dolny róg - status alarmu
+  display.setFont(&FreeSans9pt7b);
+  if (minsToAlarm >= 0) {
+    display.drawBitmap(10, 106, alarm_glyph_bell, 16, 16, GxEPD_BLACK);
+    display.setCursor(30, 122);
 
-    // 3. Lewy dolny róg - status alarmu
-    display.setFont(&FreeSans9pt7b);
-    if (minsToAlarm >= 0) {
-      display.drawBitmap(10, 106, alarm_glyph_bell, 16, 16, GxEPD_BLACK);
-      display.setCursor(30, 122);
+    // Oblicz godzinę następnego alarmu
+    time_t now_t = mktime(&timeinfo);
+    time_t next_t = now_t + (minsToAlarm * 60);
+    struct tm *alarmTm = localtime(&next_t);
+    char alarmTime[10];
+    sprintf(alarmTime, "%02d:%02d", alarmTm->tm_hour, alarmTm->tm_min);
+    display.print(alarmTime);
+  } else {
+    display.drawBitmap(10, 106, alarm_glyph_bell_outline, 16, 16, GxEPD_BLACK);
+  }
 
-      // Oblicz godzinę następnego alarmu
-      time_t now_t = mktime(&timeinfo);
-      time_t next_t = now_t + (minsToAlarm * 60);
-      struct tm *alarmTm = localtime(&next_t);
-      char alarmTime[10];
-      sprintf(alarmTime, "%02d:%02d", alarmTm->tm_hour, alarmTm->tm_min);
-      display.print(alarmTime);
-    } else {
-      display.drawBitmap(10, 106, alarm_glyph_bell_outline, 16, 16, GxEPD_BLACK);
-    }
-
-    // 4. Prawy dolny róg - czas do alarmu
-    int16_t abx, aby; uint16_t abw, abh;
-    display.getTextBounds(alarmRemaining.c_str(), 0, 0, &abx, &aby, &abw, &abh);
-    display.setCursor(display.width() - abw - 10, 122);
-    display.print(alarmRemaining);
-
-  } while (display.nextPage());
+  // 4. Prawy dolny róg - czas do alarmu
+  int16_t abx, aby; uint16_t abw, abh;
+  display.getTextBounds(alarmRemaining.c_str(), 0, 0, &abx, &aby, &abw, &abh);
+  display.setCursor(display.width() - abw - 10, 122);
+  display.print(alarmRemaining);
 }
 
 
@@ -570,49 +566,44 @@ void handleButtons() {
   }
 }
 
-void drawSetAlarmScreen() {
-  display.firstPage();
-  do {
-    display.fillScreen(GxEPD_WHITE);
+void drawSetAlarmContent() {
+  display.setFont(&FreeSansBold12pt7b);
+  display.setCursor(10, 30);
+  display.print(F("Ustawianie alarmu"));
+
+  if (currentState == STATE_SET_ALARM_DAY) {
+    drawCenteredText(dayNamesShort[settingAlarmDay], 95, &FreeSansBold18pt7b, 2);
+    display.fillRect((display.width() - 80) / 2, 105, 80, 5, GxEPD_BLACK);
+  } else {
+    char alarmTimeStr[6];
+    sprintf(alarmTimeStr, "%02d:%02d", alarmHours[settingAlarmDay], alarmMinutes[settingAlarmDay]);
+
     display.setFont(&FreeSansBold12pt7b);
-    display.setCursor(10, 30);
-    display.print(F("Ustawianie alarmu"));
+    display.setTextSize(3);
+    int16_t tbx, tby; uint16_t tbw, tbh;
+    display.getTextBounds(alarmTimeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
+    int startX = (display.width() - tbw) / 2;
+    int yPos = 85;
 
-    if (currentState == STATE_SET_ALARM_DAY) {
-      drawCenteredText(dayNamesShort[settingAlarmDay], 95, &FreeSansBold18pt7b, 2);
-      display.fillRect((display.width() - 80) / 2, 105, 80, 5, GxEPD_BLACK);
-    } else {
-      char alarmTimeStr[6];
-      sprintf(alarmTimeStr, "%02d:%02d", alarmHours[settingAlarmDay], alarmMinutes[settingAlarmDay]);
+    display.setCursor(startX, yPos);
+    display.print(alarmTimeStr);
 
-      display.setFont(&FreeSansBold12pt7b);
-      display.setTextSize(3);
-      int16_t tbx, tby; uint16_t tbw, tbh;
-      display.getTextBounds(alarmTimeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
-      int startX = (display.width() - tbw) / 2;
-      int yPos = 85;
-
-      display.setCursor(startX, yPos);
-      display.print(alarmTimeStr);
-
-      if (currentState == STATE_SET_ALARM_HOUR) {
-        char hStr[3]; sprintf(hStr, "%02d", alarmHours[settingAlarmDay]);
-        int16_t hx, hy; uint16_t hw, hh;
-        display.getTextBounds(hStr, 0, 0, &hx, &hy, &hw, &hh);
-        display.fillRect(startX, yPos + 10, hw, 5, GxEPD_BLACK);
-      } else if (currentState == STATE_SET_ALARM_MINUTE) {
-        char hmStr[4]; sprintf(hmStr, "%02d:", alarmHours[settingAlarmDay]);
-        int16_t hmx, hmy; uint16_t hmw, hmh;
-        display.getTextBounds(hmStr, 0, 0, &hmx, &hmy, &hmw, &hmh);
-        char mStr[3]; sprintf(mStr, "%02d", alarmMinutes[settingAlarmDay]);
-        int16_t mx, my; uint16_t mw, mh2;
-        display.getTextBounds(mStr, 0, 0, &mx, &my, &mw, &mh2);
-        display.fillRect(startX + hmw, yPos + 10, mw, 5, GxEPD_BLACK);
-      }
-      display.setTextSize(1);
+    if (currentState == STATE_SET_ALARM_HOUR) {
+      char hStr[3]; sprintf(hStr, "%02d", alarmHours[settingAlarmDay]);
+      int16_t hx, hy; uint16_t hw, hh;
+      display.getTextBounds(hStr, 0, 0, &hx, &hy, &hw, &hh);
+      display.fillRect(startX, yPos + 10, hw, 5, GxEPD_BLACK);
+    } else if (currentState == STATE_SET_ALARM_MINUTE) {
+      char hmStr[4]; sprintf(hmStr, "%02d:", alarmHours[settingAlarmDay]);
+      int16_t hmx, hmy; uint16_t hmw, hmh;
+      display.getTextBounds(hmStr, 0, 0, &hmx, &hmy, &hmw, &hmh);
+      char mStr[3]; sprintf(mStr, "%02d", alarmMinutes[settingAlarmDay]);
+      int16_t mx, my; uint16_t mw, mh2;
+      display.getTextBounds(mStr, 0, 0, &mx, &my, &mw, &mh2);
+      display.fillRect(startX + hmw, yPos + 10, mw, 5, GxEPD_BLACK);
     }
-
-  } while (display.nextPage());
+    display.setTextSize(1);
+  }
 }
 
 void drawCenteredText(const char* text, int y, const GFXfont* font, uint8_t size) {
@@ -686,19 +677,15 @@ long getMinutesToNextAlarm(struct tm &now) {
   return -1;
 }
 
-void drawAlarmRingingScreen() {
+void drawAlarmRingingContent() {
   struct tm timeinfo;
   char timeHourMin[6] = "";
   if (getLocalTime(&timeinfo)) {
     strftime(timeHourMin, sizeof(timeHourMin), "%H:%M", &timeinfo);
   }
 
-  display.firstPage();
-  do {
-    display.fillScreen(GxEPD_WHITE);
-    drawCenteredText("ALARM", 30, &FreeSansBold12pt7b, 2);
-    if (timeHourMin[0] != '\0') {
-      drawCenteredText(timeHourMin, 100, &FreeSansBold24pt7b, 2);
-    }
-  } while (display.nextPage());
+  drawCenteredText("ALARM", 30, &FreeSansBold12pt7b, 2);
+  if (timeHourMin[0] != '\0') {
+    drawCenteredText(timeHourMin, 100, &FreeSansBold24pt7b, 2);
+  }
 }
