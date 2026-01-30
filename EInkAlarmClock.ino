@@ -30,11 +30,11 @@ const int   DAYLIGHT_OFFSET_SEC = 3600; // Przesunięcie dla czasu letniego
 
 // --- DEFINICJE PINÓW ---
 // Przyciski
-const int BUTTON_UP_PIN = 4;
+const int BUTTON_UP_PIN = 16;
 const int BUTTON_DOWN_PIN = 17;
-const int BUTTON_OK_PIN = 25;
+const int BUTTON_OK_PIN = 26;
 // Głośnik
-const int SPEAKER_PIN = 26;
+const int SPEAKER_PIN = 25;
 // Wyświetlacz e-ink (SPI) - dostosuj do swojego podłączenia!
 const int EPD_CS_PIN = 22;
 const int EPD_DC_PIN = 27;
@@ -103,6 +103,7 @@ void setup() {
 
   // Wczytaj konfigurację z pamięci
   loadConfiguration();
+  lastWeatherFetch = millis() - 1790000; // Opóźnij pierwsze pobieranie pogody o 10s
 
   // --- ŁĄCZENIE Z WIFI ---
   WiFiManager wifiManager;
@@ -125,7 +126,7 @@ void setup() {
 
   // --- INICJALIZACJA SPRZĘTU ---
   // Wyświetlacz
-  display.init(115200, true, 10, false);
+  display.init(115200, true, 2, false);
   display.setRotation(1);
   display.setTextColor(GxEPD_BLACK);
 
@@ -450,27 +451,22 @@ void drawTimeContent(struct tm &timeinfo) {
   String alarmRemaining = (minsToAlarm >= 0) ?
     "Alarm za:" + String(minsToAlarm / 60) + "h" + String(minsToAlarm % 60) + "m" : "Brak alarmu";
 
-  // 1. Pogoda i Data u góry
-  // Dzień tygodnia (większy)
+  // 1. Pogoda (nagłówek wysrodkowany)
+  String weatherStr = cityName + ":" + String(currentTemp, 1) + "C " + getWeatherDesc(weatherCode);
+  drawCenteredText(weatherStr.c_str(), 20, &FreeSans9pt7b, 1);
+
+  // 2. Dzień tygodnia i data (na wysokości godziny)
   display.setFont(&FreeSansBold12pt7b);
-  display.setCursor(10, 20);
+  display.setCursor(10, 85);
   display.print(dayNamesShort[timeinfo.tm_wday]);
 
-  // Data (mniejsza, pod dniem)
   display.setFont(&FreeSans9pt7b);
   char dateStr[10];
   sprintf(dateStr, "%02d.%02d", timeinfo.tm_mday, timeinfo.tm_mon + 1);
-  display.setCursor(10, 36);
+  display.setCursor(10, 105);
   display.print(dateStr);
 
-  // Pogoda (wyrównana do prawej)
-  String weatherStr = cityName + ":" + String(currentTemp, 1) + "C " + getWeatherDesc(weatherCode);
-  int16_t wx, wy; uint16_t ww, wh;
-  display.getTextBounds(weatherStr, 0, 0, &wx, &wy, &ww, &wh);
-  display.setCursor(display.width() - ww - 10, 25);
-  display.print(weatherStr);
-
-  // 2. Główna godzina (wyśrodkowana)
+  // 3. Główna godzina (wyśrodkowana)
   drawCenteredText(timeHourMin, 90, &FreeSansBold12pt7b, 3);
 
   // 3. Lewy dolny róg - status alarmu
@@ -632,6 +628,7 @@ void fetchWeather() {
         weatherCode = doc["current_weather"]["weathercode"];
         lastWeatherFetch = millis();
         Serial.println("Pogoda zaktualizowana.");
+        forceScreenUpdate = true;
       }
     }
     http.end();
@@ -684,7 +681,7 @@ void drawAlarmRingingContent() {
     strftime(timeHourMin, sizeof(timeHourMin), "%H:%M", &timeinfo);
   }
 
-  drawCenteredText("ALARM", 30, &FreeSansBold12pt7b, 2);
+  drawCenteredText("ALARM", 25, &FreeSansBold18pt7b, 1);
   if (timeHourMin[0] != '\0') {
     drawCenteredText(timeHourMin, 100, &FreeSansBold24pt7b, 2);
   }
